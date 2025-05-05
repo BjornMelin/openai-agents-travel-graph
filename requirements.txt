@@ -1,0 +1,26 @@
+# Core frameworks
+openai-agents>=0.0.14  # OpenAI Agents SDK (latest version as of May 2025)
+agents-sdk-models>=0.0.11  # Model adapters for OpenAI Agents SDK
+langchain>=0.1.0  # LangChain Core
+langgraph>=0.4.0  # LangGraph for agent orchestration
+stagehand-py>=0.3.6  # Browser automation (latest version as of May 2025)
+supabase>=2.1.0  # Supabase integration
+
+# Browser automation
+playwright>=1.42.0  # Required by Stagehand
+
+# Utility libraries
+pydantic>=2.6.0  # Data validation
+python-dotenv>=1.0.0  # Environment variables
+typing-extensions>=4.9.0  # Additional type hints
+loguru>=0.7.2  # Logging
+tenacity>=8.2.3  # Retry functionality
+httpx>=0.26.0  # HTTP client
+
+# Data handling
+python-dateutil>=2.8.2  # Date utilities
+pycountry>=23.12.11  # Country data
+
+# Research tools
+tavily-python>=0.2.8  # Tavily API integration
+firecrawl>=0.1.0  # FireCrawl API integration
