@@ -6,12 +6,11 @@ agents in the travel planner system will inherit from. It provides common
 functionality and standardized interfaces for all agents.
 """
 
-import abc
 from dataclasses import dataclass, field
-from typing import Any, Dict, List, Optional, Type, TypeVar, Generic, Union
+from typing import Any, Generic, TypeVar
 
 from openai import OpenAI
-from pydantic import BaseModel, Field
+from pydantic import BaseModel
 
 # Type variable for context
 T = TypeVar('T')
@@ -38,8 +37,8 @@ class AgentConfig:
     instructions: str
     model: str = "gpt-4o"
     temperature: float = 0.7
-    max_tokens: Optional[int] = None
-    tools: List[Any] = field(default_factory=list)
+    max_tokens: int | None = None
+    tools: list[Any] = field(default_factory=list)
 
 
 class BaseAgent(Generic[T]):
@@ -57,7 +56,7 @@ class BaseAgent(Generic[T]):
     def __init__(
         self,
         config: AgentConfig,
-        context_type: Optional[Type[T]] = None,
+        context_type: type[T] | None = None,
     ):
         """
         Initialize a base agent.
@@ -80,7 +79,7 @@ class BaseAgent(Generic[T]):
         """Get the instructions for the agent."""
         return self.config.instructions
     
-    async def run(self, input_data: Union[str, List[Dict[str, Any]]], context: Optional[T] = None) -> Any:
+    async def run(self, input_data: str | list[dict[str, Any]], context: T | None = None) -> Any:
         """
         Run the agent with the provided input and context.
         
@@ -112,7 +111,7 @@ class BaseAgent(Generic[T]):
             raise InvalidConfigurationException("Agent instructions cannot be empty")
         return True
 
-    def _prepare_messages(self, input_data: Union[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
+    def _prepare_messages(self, input_data: str | list[dict[str, Any]]) -> list[dict[str, Any]]:
         """
         Prepare messages for the API call.
         
@@ -127,11 +126,10 @@ class BaseAgent(Generic[T]):
                 {"role": "system", "content": self.instructions},
                 {"role": "user", "content": input_data}
             ]
+        # If input_data is already a list of messages, add system message if not present
+        elif input_data and input_data[0].get("role") != "system":
+            messages = [{"role": "system", "content": self.instructions}, *input_data]
         else:
-            # If input_data is already a list of messages, add system message if not present
-            if input_data and input_data[0].get("role") != "system":
-                messages = [{"role": "system", "content": self.instructions}] + input_data
-            else:
-                messages = input_data
+            messages = input_data
         
         return messages

@@ -5,20 +5,19 @@ This module implements the specialized agent responsible for searching,
 comparing, and recommending flight options for the travel itinerary.
 """
 
-import asyncio
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from enum import Enum
-from typing import Dict, List, Optional, Any, Union
+from typing import Any
 
-from travel_planner.agents.base import BaseAgent, AgentConfig, AgentContext
+from travel_planner.agents.base import AgentConfig, AgentContext, BaseAgent
 from travel_planner.utils import (
-    AgentLogger, 
-    handle_errors, 
-    with_retry,
     AgentExecutionError,
+    AgentLogger,
+    format_price,
+    handle_errors,
     safe_serialize,
-    format_price
+    with_retry,
 )
 
 
@@ -40,7 +39,7 @@ class FlightLeg:
     arrival_airport: str
     arrival_time: str
     duration_minutes: int
-    aircraft: Optional[str] = None
+    aircraft: str | None = None
 
 
 @dataclass
@@ -50,14 +49,14 @@ class FlightOption:
     price: float
     currency: str
     cabin_class: CabinClass
-    legs: List[FlightLeg]
+    legs: list[FlightLeg]
     layover_count: int
     total_duration_minutes: int
-    baggage_allowance: Optional[str] = None
+    baggage_allowance: str | None = None
     refundable: bool = False
     changeable: bool = False
     eco_friendly: bool = False
-    amenities: List[str] = field(default_factory=list)
+    amenities: list[str] = field(default_factory=list)
     
     @property
     def formatted_price(self) -> str:
@@ -76,17 +75,17 @@ class FlightSearchContext(AgentContext):
     """Context for the flight search agent."""
     origin: str = ""
     destination: str = ""
-    departure_date: Optional[str] = None
-    return_date: Optional[str] = None
+    departure_date: str | None = None
+    return_date: str | None = None
     travelers: int = 1
     cabin_class: CabinClass = CabinClass.ECONOMY
-    max_price: Optional[float] = None
+    max_price: float | None = None
     currency: str = "USD"
-    preferred_airlines: List[str] = field(default_factory=list)
-    flight_options: List[FlightOption] = field(default_factory=list)
-    selected_flight: Optional[FlightOption] = None
-    search_params: Dict[str, Any] = field(default_factory=dict)
-    search_results_raw: Dict[str, Any] = field(default_factory=dict)
+    preferred_airlines: list[str] = field(default_factory=list)
+    flight_options: list[FlightOption] = field(default_factory=list)
+    selected_flight: FlightOption | None = None
+    search_params: dict[str, Any] = field(default_factory=dict)
+    search_results_raw: dict[str, Any] = field(default_factory=dict)
 
 
 class FlightSearchAgent(BaseAgent[FlightSearchContext]):
@@ -101,7 +100,7 @@ class FlightSearchAgent(BaseAgent[FlightSearchContext]):
     5. Presenting flight options with key details
     """
     
-    def __init__(self, config: Optional[AgentConfig] = None):
+    def __init__(self, config: AgentConfig | None = None):
         """
         Initialize the flight search agent.
         
@@ -131,9 +130,9 @@ class FlightSearchAgent(BaseAgent[FlightSearchContext]):
     
     async def run(
         self, 
-        input_data: Union[str, List[Dict[str, Any]]], 
-        context: Optional[FlightSearchContext] = None
-    ) -> Dict[str, Any]:
+        input_data: str | list[dict[str, Any]], 
+        context: FlightSearchContext | None = None
+    ) -> dict[str, Any]:
         """
         Run the flight search agent with the provided input and context.
         
@@ -157,16 +156,16 @@ class FlightSearchAgent(BaseAgent[FlightSearchContext]):
                 "result": result,
             }
         except Exception as e:
-            error_msg = f"Error in flight search agent: {str(e)}"
+            error_msg = f"Error in flight search agent: {e!s}"
             self.logger.error(error_msg)
             raise AgentExecutionError(error_msg, self.name, original_error=e)
     
     @handle_errors(error_cls=AgentExecutionError)
     async def process(
         self, 
-        input_data: Union[str, List[Dict[str, Any]]], 
+        input_data: str | list[dict[str, Any]], 
         context: FlightSearchContext
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Process the flight search request.
         
@@ -180,7 +179,7 @@ class FlightSearchAgent(BaseAgent[FlightSearchContext]):
         self.logger.info(f"Processing flight search for: {context.origin} to {context.destination}")
         
         # Prepare messages for the model
-        messages = self._prepare_messages(input_data)
+        self._prepare_messages(input_data)
         
         # Extract search parameters if not already set
         if not context.origin or not context.destination or not context.departure_date:
@@ -205,7 +204,7 @@ class FlightSearchAgent(BaseAgent[FlightSearchContext]):
     
     async def _extract_search_params(
         self, 
-        input_data: Union[str, List[Dict[str, Any]]], 
+        input_data: str | list[dict[str, Any]], 
         context: FlightSearchContext
     ) -> None:
         """
@@ -238,7 +237,7 @@ class FlightSearchAgent(BaseAgent[FlightSearchContext]):
                 "content": f"Current parameters: {safe_serialize(context)}"
             })
         
-        response = await self._call_model(messages)
+        await self._call_model(messages)
         
         # In a real implementation, we would parse the JSON response 
         # and update the context with the extracted parameters
@@ -257,7 +256,7 @@ class FlightSearchAgent(BaseAgent[FlightSearchContext]):
             next_week = datetime.now() + timedelta(days=8)
             context.return_date = next_week.strftime("%Y-%m-%d")
     
-    async def _search_flights(self, context: FlightSearchContext) -> List[Dict[str, Any]]:
+    async def _search_flights(self, context: FlightSearchContext) -> list[dict[str, Any]]:
         """
         Search for flights based on the context parameters.
         
@@ -324,9 +323,9 @@ class FlightSearchAgent(BaseAgent[FlightSearchContext]):
     
     async def _rank_flight_options(
         self, 
-        search_results: List[Dict[str, Any]], 
+        search_results: list[dict[str, Any]], 
         context: FlightSearchContext
-    ) -> List[FlightOption]:
+    ) -> list[FlightOption]:
         """
         Rank and convert flight options based on user preferences.
         
@@ -384,7 +383,7 @@ class FlightSearchAgent(BaseAgent[FlightSearchContext]):
     
     async def _generate_options_summary(
         self, 
-        options: List[FlightOption], 
+        options: list[FlightOption], 
         context: FlightSearchContext
     ) -> str:
         """
@@ -430,7 +429,7 @@ class FlightSearchAgent(BaseAgent[FlightSearchContext]):
         # Return the generated summary
         return response.get("content", "Flight options summary not available.")
     
-    def _format_flight_option(self, option: FlightOption) -> Dict[str, Any]:
+    def _format_flight_option(self, option: FlightOption) -> dict[str, Any]:
         """
         Format a flight option for display.
         
@@ -473,7 +472,7 @@ class FlightSearchAgent(BaseAgent[FlightSearchContext]):
             "amenities": option.amenities
         }
     
-    def _get_latest_user_input(self, messages: List[Dict[str, Any]]) -> str:
+    def _get_latest_user_input(self, messages: list[dict[str, Any]]) -> str:
         """
         Extract the latest user input from a list of messages.
         
@@ -489,7 +488,7 @@ class FlightSearchAgent(BaseAgent[FlightSearchContext]):
         return ""
     
     @with_retry(max_attempts=3)
-    async def _call_model(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def _call_model(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Call the OpenAI API with the given messages.
         
@@ -528,5 +527,5 @@ class FlightSearchAgent(BaseAgent[FlightSearchContext]):
             return {"content": "No response generated."}
             
         except Exception as e:
-            self.logger.error(f"Error calling model: {str(e)}")
+            self.logger.error(f"Error calling model: {e!s}")
             raise

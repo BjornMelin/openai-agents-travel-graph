@@ -6,18 +6,17 @@ destination information, analyzing travel advisories, providing weather
 insights, and identifying points of interest for potential travel destinations.
 """
 
-import asyncio
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any, Union
+from typing import Any
 
-from travel_planner.agents.base import BaseAgent, AgentConfig, AgentContext
+from travel_planner.agents.base import AgentConfig, AgentContext, BaseAgent
 from travel_planner.utils import (
-    AgentLogger, 
-    handle_errors, 
-    with_retry,
     AgentExecutionError,
-    safe_serialize
+    AgentLogger,
+    handle_errors,
+    with_retry,
 )
+from travel_planner.utils.rate_limiting import rate_limited
 
 
 @dataclass
@@ -26,11 +25,11 @@ class DestinationInfo:
     name: str
     country: str
     description: str = ""
-    weather: Dict[str, Any] = field(default_factory=dict)
-    best_times_to_visit: List[str] = field(default_factory=list)
-    points_of_interest: List[Dict[str, Any]] = field(default_factory=list)
-    local_transportation: List[Dict[str, Any]] = field(default_factory=list)
-    travel_advisories: List[Dict[str, Any]] = field(default_factory=list)
+    weather: dict[str, Any] = field(default_factory=dict)
+    best_times_to_visit: list[str] = field(default_factory=list)
+    points_of_interest: list[dict[str, Any]] = field(default_factory=list)
+    local_transportation: list[dict[str, Any]] = field(default_factory=list)
+    travel_advisories: list[dict[str, Any]] = field(default_factory=list)
     visa_requirements: str = ""
     language: str = ""
     currency: str = ""
@@ -42,10 +41,10 @@ class DestinationInfo:
 class DestinationContext(AgentContext):
     """Context for the destination research agent."""
     query: str = ""
-    destinations: List[DestinationInfo] = field(default_factory=list)
-    selected_destination: Optional[DestinationInfo] = None
-    travel_dates: Dict[str, str] = field(default_factory=dict)
-    search_results: Dict[str, Any] = field(default_factory=dict)
+    destinations: list[DestinationInfo] = field(default_factory=list)
+    selected_destination: DestinationInfo | None = None
+    travel_dates: dict[str, str] = field(default_factory=dict)
+    search_results: dict[str, Any] = field(default_factory=dict)
 
 
 class DestinationResearchAgent(BaseAgent[DestinationContext]):
@@ -60,7 +59,7 @@ class DestinationResearchAgent(BaseAgent[DestinationContext]):
     5. Identifying key points of interest and activities
     """
     
-    def __init__(self, config: Optional[AgentConfig] = None):
+    def __init__(self, config: AgentConfig | None = None):
         """
         Initialize the destination research agent.
         
@@ -90,9 +89,9 @@ class DestinationResearchAgent(BaseAgent[DestinationContext]):
     
     async def run(
         self, 
-        input_data: Union[str, List[Dict[str, Any]]], 
-        context: Optional[DestinationContext] = None
-    ) -> Dict[str, Any]:
+        input_data: str | list[dict[str, Any]], 
+        context: DestinationContext | None = None
+    ) -> dict[str, Any]:
         """
         Run the destination research agent with the provided input and context.
         
@@ -120,16 +119,16 @@ class DestinationResearchAgent(BaseAgent[DestinationContext]):
                 "result": result,
             }
         except Exception as e:
-            error_msg = f"Error in destination research agent: {str(e)}"
+            error_msg = f"Error in destination research agent: {e!s}"
             self.logger.error(error_msg)
             raise AgentExecutionError(error_msg, self.name, original_error=e)
     
     @handle_errors(error_cls=AgentExecutionError)
     async def process(
         self, 
-        input_data: Union[str, List[Dict[str, Any]]], 
+        input_data: str | list[dict[str, Any]], 
         context: DestinationContext
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Process the destination research request.
         
@@ -143,7 +142,7 @@ class DestinationResearchAgent(BaseAgent[DestinationContext]):
         self.logger.info(f"Processing destination research for query: {context.query}")
         
         # Prepare messages for the model
-        messages = self._prepare_messages(input_data)
+        self._prepare_messages(input_data)
         
         # Determine the type of request (destination suggestion or detailed research)
         if not context.selected_destination:
@@ -155,7 +154,7 @@ class DestinationResearchAgent(BaseAgent[DestinationContext]):
         
         return result
     
-    async def _suggest_destinations(self, context: DestinationContext) -> Dict[str, Any]:
+    async def _suggest_destinations(self, context: DestinationContext) -> dict[str, Any]:
         """
         Suggest destinations based on user preferences.
         
@@ -190,7 +189,7 @@ class DestinationResearchAgent(BaseAgent[DestinationContext]):
         # For now, we'll return the raw response
         return {"suggestions": response.get("content", "")}
     
-    async def _research_destination(self, destination: str, context: DestinationContext) -> Dict[str, Any]:
+    async def _research_destination(self, destination: str, context: DestinationContext) -> dict[str, Any]:
         """
         Research detailed information about a specific destination.
         
@@ -227,7 +226,8 @@ class DestinationResearchAgent(BaseAgent[DestinationContext]):
         return {"research": response.get("content", "")}
     
     @with_retry(max_attempts=3)
-    async def _call_model(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    @rate_limited("openai")
+    async def _call_model(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Call the OpenAI API with the given messages.
         
@@ -266,7 +266,7 @@ class DestinationResearchAgent(BaseAgent[DestinationContext]):
             return {"content": "No response generated."}
             
         except Exception as e:
-            self.logger.error(f"Error calling model: {str(e)}")
+            self.logger.error(f"Error calling model: {e!s}")
             raise
     
     # In a complete implementation, we would add methods for:

@@ -1,0 +1,58 @@
+## API Rate Limiting
+
+The system includes comprehensive API rate limiting and exponential backoff capabilities to ensure:
+
+- Respect for external API quotas and rate limits
+- Graceful handling of temporary service outages
+- Efficient resource usage across concurrent operations
+- Optimization of API costs
+
+### Rate Limiting Configuration
+
+You can customize rate limits for each external service used by the system:
+
+```json
+{
+  "openai": {
+    "requests_per_minute": 20,
+    "requests_per_day": 1000,
+    "max_retries": 3,
+    "min_wait_seconds": 1.0,
+    "max_wait_seconds": 30.0
+  }
+}
+```
+
+To use a custom rate limit configuration:
+
+```bash
+python -m travel_planner.main --rate-limit-config rate_limit_config.json
+```
+
+To disable rate limiting (use with caution):
+
+```bash
+python -m travel_planner.main --disable-rate-limits
+```
+
+### Supported Services
+
+The system includes built-in rate limiting for:
+
+- OpenAI API
+- Tavily Search API
+- Firecrawl API
+- Supabase API
+
+You can extend this to any additional external services by creating rate limit configurations and using the `@rate_limited` decorator with your API calls.
+
+### Exponential Backoff
+
+When rate limits are reached or API errors occur, the system will automatically:
+
+1. Pause operations for an appropriate cool-down period
+2. Retry with exponential backoff based on service configuration
+3. Fall back gracefully if operations cannot complete
+4. Provide detailed logging of rate limiting events
+
+This ensures the travel planning system remains robust even under high loads or API quota constraints.

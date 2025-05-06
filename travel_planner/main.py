@@ -11,7 +11,7 @@ import json
 import os
 import sys
 import traceback
-from datetime import date, datetime
+from datetime import datetime
 
 from travel_planner.agents.accommodation import AccommodationAgent
 from travel_planner.agents.activity_planning import ActivityPlanningAgent
@@ -20,13 +20,14 @@ from travel_planner.agents.destination_research import DestinationResearchAgent
 from travel_planner.agents.flight_search import FlightSearchAgent
 from travel_planner.agents.research_tools import DestinationResearchTools
 from travel_planner.agents.transportation import TransportationAgent
-from travel_planner.config import initialize_config, TravelPlannerConfig
+from travel_planner.config import TravelPlannerConfig, initialize_config
 from travel_planner.data.models import TravelPlan, TravelQuery
 from travel_planner.data.setup import initialize_database
 from travel_planner.data.supabase import SupabaseClient
 from travel_planner.orchestration.state_graph import TravelPlanningState
 from travel_planner.orchestration.workflow import TravelWorkflow
 from travel_planner.utils.logging import get_logger, setup_logging
+from travel_planner.utils.rate_limiting import initialize_rate_limiting
 
 # Initialize logger
 logger = get_logger(__name__)
@@ -76,6 +77,16 @@ def setup_argparse() -> argparse.ArgumentParser:
         "--init-db",
         action="store_true",
         help="Initialize Supabase database tables if they don't exist",
+    )
+    system_group.add_argument(
+        "--disable-rate-limits",
+        action="store_true",
+        help="Disable API rate limiting (use with caution)",
+    )
+    system_group.add_argument(
+        "--rate-limit-config",
+        type=str,
+        help="Path to custom rate limit configuration file",
     )
 
     # Query mode arguments
@@ -327,36 +338,48 @@ async def save_travel_plan(
     elif format_type == "text":
         with open(file_path, "w") as f:
             # Write the header
-            destination_name = plan.destination.get("name", "Unknown") if isinstance(plan.destination, dict) else plan.destination
+            destination_name = (
+                plan.destination.get("name", "Unknown")
+                if isinstance(plan.destination, dict)
+                else plan.destination
+            )
             f.write(f"TRAVEL PLAN TO {destination_name.upper()}\n")
             f.write("=" * 50 + "\n\n")
-            
+
             # Write overview if available
             if plan.overview:
                 f.write("OVERVIEW\n")
                 f.write("-" * 8 + "\n")
                 f.write(f"{plan.overview}\n\n")
-            
+
             # Write flight information
             if plan.flights and len(plan.flights) > 0:
                 f.write("FLIGHTS\n")
                 f.write("-" * 7 + "\n")
                 for i, flight in enumerate(plan.flights):
                     f.write(f"{i+1}. {flight.airline}: {flight.flight_number}\n")
-                    f.write(f"   From: {flight.departure_airport} - To: {flight.arrival_airport}\n")
-                    f.write(f"   Departure: {flight.departure_time.strftime('%Y-%m-%d %H:%M')}\n")
-                    f.write(f"   Arrival: {flight.arrival_time.strftime('%Y-%m-%d %H:%M')}\n")
+                    f.write(
+                        f"   From: {flight.departure_airport} - To: {flight.arrival_airport}\n"
+                    )
+                    f.write(
+                        f"   Departure: {flight.departure_time.strftime('%Y-%m-%d %H:%M')}\n"
+                    )
+                    f.write(
+                        f"   Arrival: {flight.arrival_time.strftime('%Y-%m-%d %H:%M')}\n"
+                    )
                     f.write(f"   Class: {flight.travel_class.value}\n")
                     f.write(f"   Price: {flight.currency} {flight.price:.2f}\n")
                     if flight.layovers and len(flight.layovers) > 0:
                         f.write(f"   Layovers: {len(flight.layovers)}\n")
                         for j, layover in enumerate(flight.layovers):
-                            f.write(f"      {j+1}. {layover.get('airport', 'Unknown')} - Duration: {layover.get('duration_minutes', 0)} min\n")
+                            f.write(
+                                f"      {j+1}. {layover.get('airport', 'Unknown')} - Duration: {layover.get('duration_minutes', 0)} min\n"
+                            )
                     f.write(f"   Duration: {flight.duration_minutes} minutes\n")
                     if flight.booking_link:
                         f.write(f"   Booking: {flight.booking_link}\n")
                     f.write("\n")
-            
+
             # Write accommodation information
             if plan.accommodation and len(plan.accommodation) > 0:
                 f.write("ACCOMMODATIONS\n")
@@ -366,73 +389,100 @@ async def save_travel_plan(
                     f.write(f"   Address: {acc.address}\n")
                     if acc.rating:
                         f.write(f"   Rating: {acc.rating}/5\n")
-                    f.write(f"   Check-in: {acc.check_in_time} - Check-out: {acc.check_out_time}\n")
-                    f.write(f"   Price per night: {acc.currency} {acc.price_per_night:.2f}\n")
+                    f.write(
+                        f"   Check-in: {acc.check_in_time} - Check-out: {acc.check_out_time}\n"
+                    )
+                    f.write(
+                        f"   Price per night: {acc.currency} {acc.price_per_night:.2f}\n"
+                    )
                     f.write(f"   Total price: {acc.currency} {acc.total_price:.2f}\n")
                     if acc.amenities and len(acc.amenities) > 0:
                         f.write(f"   Amenities: {', '.join(acc.amenities)}\n")
                     if acc.booking_link:
                         f.write(f"   Booking: {acc.booking_link}\n")
                     f.write("\n")
-            
+
             # Write daily itinerary
             if plan.activities and len(plan.activities) > 0:
                 f.write("DAILY ITINERARY\n")
                 f.write("-" * 15 + "\n")
-                for day_key, day in plan.activities.items():
+                for _day_key, day in plan.activities.items():
                     f.write(f"Day {day.day_number} - {day.date.strftime('%Y-%m-%d')}\n")
                     if day.weather_forecast:
                         weather = day.weather_forecast
-                        f.write(f"   Weather: {weather.get('description', 'N/A')}, {weather.get('temperature', 'N/A')}°C\n")
-                    
+                        f.write(
+                            f"   Weather: {weather.get('description', 'N/A')}, {weather.get('temperature', 'N/A')}°C\n"
+                        )
+
                     for i, activity in enumerate(day.activities):
                         duration_hours = activity.duration_minutes // 60
                         duration_mins = activity.duration_minutes % 60
-                        duration = f"{duration_hours}h {duration_mins}m" if duration_hours > 0 else f"{duration_mins}m"
-                        
+                        duration = (
+                            f"{duration_hours}h {duration_mins}m"
+                            if duration_hours > 0
+                            else f"{duration_mins}m"
+                        )
+
                         f.write(f"   {i+1}. {activity.name} ({activity.type.value})\n")
                         f.write(f"      {activity.description}\n")
                         f.write(f"      Location: {activity.location}\n")
                         f.write(f"      Duration: {duration}\n")
                         if activity.cost:
-                            f.write(f"      Cost: {activity.currency} {activity.cost:.2f}\n")
+                            f.write(
+                                f"      Cost: {activity.currency} {activity.cost:.2f}\n"
+                            )
                         if activity.booking_required:
-                            booking_info = f" - {activity.booking_link}" if activity.booking_link else ""
+                            booking_info = (
+                                f" - {activity.booking_link}"
+                                if activity.booking_link
+                                else ""
+                            )
                             f.write(f"      Booking required{booking_info}\n")
-                    
+
                     # Transportation for the day
                     if day.transportation and len(day.transportation) > 0:
                         f.write("   Transportation:\n")
                         for i, transport in enumerate(day.transportation):
-                            f.write(f"      {i+1}. {transport.type.value}: {transport.description}\n")
+                            f.write(
+                                f"      {i+1}. {transport.type.value}: {transport.description}\n"
+                            )
                             if transport.cost:
-                                f.write(f"         Cost: {transport.currency} {transport.cost:.2f}\n")
-                    
+                                f.write(
+                                    f"         Cost: {transport.currency} {transport.cost:.2f}\n"
+                                )
+
                     # Notes for the day
                     if day.notes:
                         f.write(f"   Notes: {day.notes}\n")
-                    
+
                     f.write("\n")
-            
+
             # Write budget information
             if plan.budget:
                 f.write("BUDGET SUMMARY\n")
                 f.write("-" * 14 + "\n")
-                f.write(f"Total budget: {plan.budget.currency} {plan.budget.total_budget:.2f}\n")
+                f.write(
+                    f"Total budget: {plan.budget.currency} {plan.budget.total_budget:.2f}\n"
+                )
                 f.write(f"Spent: {plan.budget.currency} {plan.budget.spent:.2f}\n")
-                f.write(f"Remaining: {plan.budget.currency} {plan.budget.remaining:.2f}\n")
-                
+                f.write(
+                    f"Remaining: {plan.budget.currency} {plan.budget.remaining:.2f}\n"
+                )
+
                 if plan.budget.breakdown and len(plan.budget.breakdown) > 0:
                     f.write("Breakdown:\n")
                     for category, amount in plan.budget.breakdown.items():
                         f.write(f"   {category}: {plan.budget.currency} {amount:.2f}\n")
-                
-                if plan.budget.saving_recommendations and len(plan.budget.saving_recommendations) > 0:
+
+                if (
+                    plan.budget.saving_recommendations
+                    and len(plan.budget.saving_recommendations) > 0
+                ):
                     f.write("Saving Recommendations:\n")
                     for i, rec in enumerate(plan.budget.saving_recommendations):
                         f.write(f"   {i+1}. {rec}\n")
                 f.write("\n")
-            
+
             # Write recommendations
             if plan.recommendations and len(plan.recommendations) > 0:
                 f.write("RECOMMENDATIONS\n")
@@ -440,19 +490,23 @@ async def save_travel_plan(
                 for i, rec in enumerate(plan.recommendations):
                     f.write(f"{i+1}. {rec}\n")
                 f.write("\n")
-            
+
             # Write alerts
             if plan.alerts and len(plan.alerts) > 0:
                 f.write("IMPORTANT ALERTS\n")
                 f.write("-" * 16 + "\n")
                 for i, alert in enumerate(plan.alerts):
                     f.write(f"{i+1}. {alert}\n")
-    
+
     elif format_type == "html":
-        destination_name = plan.destination.get("name", "Unknown") if isinstance(plan.destination, dict) else plan.destination
-        
+        destination_name = (
+            plan.destination.get("name", "Unknown")
+            if isinstance(plan.destination, dict)
+            else plan.destination
+        )
+
         # Build HTML content with CSS styling
-        html_content = f'''
+        html_content = f"""
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -549,261 +603,277 @@ async def save_travel_plan(
 </head>
 <body>
     <h1>Travel Plan to {destination_name}</h1>
-'''
+"""
 
         # Add overview if available
         if plan.overview:
-            html_content += f'''
+            html_content += f"""
     <div class="card">
         <h2>Overview</h2>
         <p>{plan.overview}</p>
     </div>
-'''
+"""
 
         # Add flights section
         if plan.flights and len(plan.flights) > 0:
-            html_content += '''
+            html_content += """
     <h2>Flights</h2>
-'''
+"""
             for flight in plan.flights:
-                html_content += f'''
+                html_content += f"""
     <div class="card flight">
         <h3>{flight.airline} - Flight {flight.flight_number}</h3>
-        <p><strong>From:</strong> {flight.departure_airport} &rarr; <strong>To:</strong> {flight.arrival_airport}</p>
+        <p><strong>From:</strong> {flight.departure_airport} &rarr;
+           <strong>To:</strong> {flight.arrival_airport}</p>
         <p><strong>Departure:</strong> {flight.departure_time.strftime('%Y-%m-%d %H:%M')}</p>
         <p><strong>Arrival:</strong> {flight.arrival_time.strftime('%Y-%m-%d %H:%M')}</p>
         <p><strong>Class:</strong> {flight.travel_class.value}</p>
         <p><strong>Duration:</strong> {flight.duration_minutes // 60}h {flight.duration_minutes % 60}m</p>
-'''
+"""
                 if flight.layovers and len(flight.layovers) > 0:
-                    html_content += f'''
+                    html_content += f"""
         <p><strong>Layovers:</strong> {len(flight.layovers)}</p>
         <ul>
-'''
+"""
                     for layover in flight.layovers:
-                        html_content += f'''
+                        html_content += f"""
             <li>{layover.get('airport', 'Unknown')} - Duration: {layover.get('duration_minutes', 0)} minutes</li>
-'''
-                    html_content += '''
+"""
+                    html_content += """
         </ul>
-'''
-                html_content += f'''
+"""
+                html_content += f"""
         <p class="price"><strong>Price:</strong> {flight.currency} {flight.price:.2f}</p>
-'''
+"""
                 if flight.booking_link:
-                    html_content += f'''
+                    html_content += f"""
         <p><a href="{flight.booking_link}" target="_blank">Booking Link</a></p>
-'''
-                html_content += '''
+"""
+                html_content += """
     </div>
-'''
+"""
 
         # Add accommodations section
         if plan.accommodation and len(plan.accommodation) > 0:
-            html_content += '''
+            html_content += """
     <h2>Accommodations</h2>
-'''
+"""
             for acc in plan.accommodation:
-                html_content += f'''
+                html_content += f"""
     <div class="card accommodation">
         <h3>{acc.name} ({acc.type.value})</h3>
         <p><strong>Address:</strong> {acc.address}</p>
-'''
+"""
                 if acc.rating:
-                    html_content += f'''
+                    html_content += f"""
         <p><strong>Rating:</strong> {acc.rating}/5</p>
-'''
-                html_content += f'''
+"""
+                html_content += f"""
         <p><strong>Check-in:</strong> {acc.check_in_time} - <strong>Check-out:</strong> {acc.check_out_time}</p>
         <p class="price"><strong>Price per night:</strong> {acc.currency} {acc.price_per_night:.2f}</p>
         <p class="price"><strong>Total price:</strong> {acc.currency} {acc.total_price:.2f}</p>
-'''
+"""
                 if acc.amenities and len(acc.amenities) > 0:
-                    html_content += f'''
+                    html_content += f"""
         <p><strong>Amenities:</strong> {', '.join(acc.amenities)}</p>
-'''
+"""
                 if acc.booking_link:
-                    html_content += f'''
+                    html_content += f"""
         <p><a href="{acc.booking_link}" target="_blank">Booking Link</a></p>
-'''
-                html_content += '''
+"""
+                html_content += """
     </div>
-'''
+"""
 
         # Add daily itinerary
         if plan.activities and len(plan.activities) > 0:
-            html_content += '''
+            html_content += """
     <h2>Daily Itinerary</h2>
-'''
+"""
             # Sort days by day number to ensure correct order
             sorted_days = sorted(plan.activities.items(), key=lambda x: x[1].day_number)
-            
-            for day_key, day in sorted_days:
-                html_content += f'''
+
+            for _day_key, day in sorted_days:
+                html_content += f"""
     <div class="day">
         <div class="day-header">
             <h3>Day {day.day_number} - {day.date.strftime('%Y-%m-%d')}</h3>
-'''
+"""
                 if day.weather_forecast:
                     weather = day.weather_forecast
-                    html_content += f'''
+                    html_content += f"""
             <p><strong>Weather:</strong> {weather.get('description', 'N/A')}, {weather.get('temperature', 'N/A')}°C</p>
-'''
-                html_content += '''
+"""
+                html_content += """
         </div>
-'''
+"""
                 # Activities for the day
                 if day.activities and len(day.activities) > 0:
-                    html_content += '''
+                    html_content += """
         <h4>Activities</h4>
-'''
+"""
                     for activity in day.activities:
                         duration_hours = activity.duration_minutes // 60
                         duration_mins = activity.duration_minutes % 60
-                        duration = f"{duration_hours}h {duration_mins}m" if duration_hours > 0 else f"{duration_mins}m"
-                        
-                        html_content += f'''
+                        duration = (
+                            f"{duration_hours}h {duration_mins}m"
+                            if duration_hours > 0
+                            else f"{duration_mins}m"
+                        )
+
+                        html_content += f"""
         <div class="activity card">
             <h5>{activity.name} ({activity.type.value})</h5>
             <p>{activity.description}</p>
             <p><strong>Location:</strong> {activity.location}</p>
             <p><strong>Duration:</strong> {duration}</p>
-'''
+"""
                         if activity.cost:
-                            html_content += f'''
+                            html_content += f"""
             <p class="price"><strong>Cost:</strong> {activity.currency} {activity.cost:.2f}</p>
-'''
+"""
                         if activity.booking_required:
-                            html_content += '''
+                            html_content += """
             <p><strong>Booking required</strong></p>
-'''
+"""
                             if activity.booking_link:
-                                html_content += f'''
+                                html_content += f"""
             <p><a href="{activity.booking_link}" target="_blank">Booking Link</a></p>
-'''
-                        html_content += '''
+"""
+                        html_content += """
         </div>
-'''
-                
+"""
+
                 # Transportation for the day
                 if day.transportation and len(day.transportation) > 0:
-                    html_content += '''
+                    html_content += """
         <h4>Transportation</h4>
-'''
+"""
                     for transport in day.transportation:
-                        html_content += f'''
+                        html_content += f"""
         <div class="transportation card">
             <h5>{transport.type.value}</h5>
             <p>{transport.description}</p>
-'''
+"""
                         if transport.cost:
-                            html_content += f'''
+                            html_content += f"""
             <p class="price"><strong>Cost:</strong> {transport.currency} {transport.cost:.2f}</p>
-'''
+"""
                         if transport.duration_minutes:
                             dur_hours = transport.duration_minutes // 60
                             dur_mins = transport.duration_minutes % 60
-                            dur_str = f"{dur_hours}h {dur_mins}m" if dur_hours > 0 else f"{dur_mins}m"
-                            html_content += f'''
+                            dur_str = (
+                                f"{dur_hours}h {dur_mins}m"
+                                if dur_hours > 0
+                                else f"{dur_mins}m"
+                            )
+                            html_content += f"""
             <p><strong>Duration:</strong> {dur_str}</p>
-'''
-                        html_content += '''
+"""
+                        html_content += """
         </div>
-'''
-                
+"""
+
                 # Notes for the day
                 if day.notes:
-                    html_content += f'''
+                    html_content += f"""
         <div class="notes">
             <h4>Notes</h4>
             <p>{day.notes}</p>
         </div>
-'''
-                
-                html_content += '''
+"""
+
+                html_content += """
     </div>
-'''
+"""
 
         # Add budget section
         if plan.budget:
-            html_content += '''
+            html_content += """
     <h2>Budget Summary</h2>
     <div class="card">
-'''
-            html_content += f'''
+"""
+            html_content += f"""
         <p><strong>Total Budget:</strong> {plan.budget.currency} {plan.budget.total_budget:.2f}</p>
         <p><strong>Spent:</strong> {plan.budget.currency} {plan.budget.spent:.2f}</p>
         <p><strong>Remaining:</strong> {plan.budget.currency} {plan.budget.remaining:.2f}</p>
-'''
-            
+"""
+
             # Budget breakdown
             if plan.budget.breakdown and len(plan.budget.breakdown) > 0:
-                html_content += '''
+                html_content += """
         <h3>Budget Breakdown</h3>
         <table>
             <tr>
                 <th>Category</th>
                 <th>Amount</th>
             </tr>
-'''
+"""
                 for category, amount in plan.budget.breakdown.items():
-                    html_content += f'''
+                    html_content += f"""
             <tr>
                 <td>{category}</td>
                 <td>{plan.budget.currency} {amount:.2f}</td>
             </tr>
-'''
-                html_content += '''
+"""
+                html_content += """
         </table>
-'''
-            
+"""
+
             # Saving recommendations
-            if plan.budget.saving_recommendations and len(plan.budget.saving_recommendations) > 0:
-                html_content += '''
+            if (
+                plan.budget.saving_recommendations
+                and len(plan.budget.saving_recommendations) > 0
+            ):
+                html_content += """
         <h3>Saving Recommendations</h3>
         <ul>
-'''
+"""
                 for rec in plan.budget.saving_recommendations:
-                    html_content += f'''
+                    html_content += f"""
             <li>{rec}</li>
-'''
-                html_content += '''
+"""
+                html_content += """
         </ul>
-'''
-            
-            html_content += '''
+"""
+
+            html_content += """
     </div>
-'''
+"""
 
         # Add recommendations
         if plan.recommendations and len(plan.recommendations) > 0:
-            html_content += '''
+            html_content += """
     <h2>Recommendations</h2>
-'''
+"""
             for rec in plan.recommendations:
-                html_content += f'''
+                html_content += f"""
     <div class="recommendation">{rec}</div>
-'''
-        
+"""
+
         # Add alerts
         if plan.alerts and len(plan.alerts) > 0:
-            html_content += '''
+            html_content += """
     <h2>Important Alerts</h2>
-'''
+"""
             for alert in plan.alerts:
-                html_content += f'''
+                html_content += f"""
     <div class="alert">{alert}</div>
-'''
-        
+"""
+
         # Close the HTML tags
-        html_content += '''
+        html_content += (
+            """
     <footer>
-        <p><small>Generated by AI Travel Planning System on ''' + datetime.now().strftime('%Y-%m-%d %H:%M:%S') + '''</small></p>
+        <p><small>Generated by AI Travel Planning System on """
+            + datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            + """</small></p>
     </footer>
 </body>
 </html>
-'''
-        
+"""
+        )
+
         with open(file_path, "w") as f:
             f.write(html_content)
     elif format_type == "pdf":
@@ -993,9 +1063,7 @@ def main() -> int:
     try:
         # Initialize configuration with validation
         system_config = initialize_config(
-            custom_config_path=args.config, 
-            validate=True, 
-            raise_on_error=False
+            custom_config_path=args.config, validate=True, raise_on_error=False
         )
 
         # Enhance logging setup now that we have the full configuration
@@ -1004,16 +1072,46 @@ def main() -> int:
             log_file=args.log_file,
         )
 
+        # Initialize rate limiting for external APIs
+        if args.disable_rate_limits:
+            logger.warning(
+                "API rate limiting is disabled. This may cause API quota issues."
+            )
+        else:
+            logger.info("Initializing API rate limiting...")
+
+            # Check for custom rate limit configuration
+            if args.rate_limit_config and os.path.exists(args.rate_limit_config):
+                try:
+                    with open(args.rate_limit_config) as f:
+                        from travel_planner.utils.rate_limiting import (
+                            update_rate_limits_from_config,
+                        )
+
+                        rate_limit_config = json.load(f)
+                        update_rate_limits_from_config(rate_limit_config)
+                        logger.info(
+                            f"Loaded custom rate limit configuration from {args.rate_limit_config}"
+                        )
+                except Exception as e:
+                    logger.error(f"Error loading rate limit configuration: {e}")
+                    print(f"\nError loading rate limit configuration: {e}")
+            else:
+                # Use default rate limits
+                initialize_rate_limiting()
+
         # Check if we are missing required API keys before proceeding
         if not system_config.api.validate():
-            print("\nERROR: Missing required API keys. Please configure your environment:")
+            print(
+                "\nERROR: Missing required API keys. Please configure your environment:"
+            )
             print("  - OPENAI_API_KEY: Required for AI agent functionality")
             print("  - SUPABASE_URL: Required for data persistence")
             print("  - SUPABASE_KEY: Required for data persistence")
             print("\nYou can set these in a .env file in the project root directory.")
             print("See the README.md for setup instructions.\n")
             return 1
-            
+
         # Initialize database if requested
         if args.init_db:
             logger.info("Initializing Supabase database...")
@@ -1023,7 +1121,9 @@ def main() -> int:
                 if not db_success:
                     logger.error("Failed to initialize Supabase database")
                     print("\nERROR: Failed to initialize Supabase database.")
-                    print("Please check logs for details or run 'python supabase_setup.py init' for more information.\n")
+                    print(
+                        "Please check logs for details or run 'python supabase_setup.py init' for more information.\n"
+                    )
                     return 1
                 logger.info("Supabase database initialized successfully")
             except Exception as e:

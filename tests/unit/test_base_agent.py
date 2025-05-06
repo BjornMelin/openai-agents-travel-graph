@@ -2,15 +2,19 @@
 Unit tests for the base agent class.
 """
 
+
 import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
 
 from travel_planner.agents.base import (
-    BaseAgent, 
-    AgentConfig, 
-    AgentContext,
-    InvalidConfigurationException
+    AgentConfig,
+    BaseAgent,
+    InvalidConfigurationException,
 )
+
+# Constants for test assertions
+DEFAULT_TEMPERATURE = 0.7
+SINGLE_MESSAGE_COUNT = 2
+MULTI_MESSAGE_COUNT = 4
 
 
 def test_agent_initialization():
@@ -24,7 +28,7 @@ def test_agent_initialization():
     assert agent.name == "Test Agent"
     assert agent.instructions == "Test instructions"
     assert agent.config.model == "gpt-4o"  # Default model
-    assert agent.config.temperature == 0.7  # Default temperature
+    assert agent.config.temperature == DEFAULT_TEMPERATURE  # Default temperature
 
 
 def test_agent_initialization_invalid_config():
@@ -58,7 +62,7 @@ def test_prepare_messages_string_input():
     
     messages = agent._prepare_messages("Hello")
     
-    assert len(messages) == 2
+    assert len(messages) == SINGLE_MESSAGE_COUNT
     assert messages[0]["role"] == "system"
     assert messages[0]["content"] == "Test instructions"
     assert messages[1]["role"] == "user"
@@ -81,7 +85,7 @@ def test_prepare_messages_list_input():
     
     messages = agent._prepare_messages(input_messages)
     
-    assert len(messages) == 4  # Input messages + system message
+    assert len(messages) == MULTI_MESSAGE_COUNT  # Input messages + system message
     assert messages[0]["role"] == "system"
     assert messages[0]["content"] == "Test instructions"
     assert messages[1:] == input_messages
@@ -102,7 +106,7 @@ def test_prepare_messages_with_existing_system():
     
     messages = agent._prepare_messages(input_messages)
     
-    assert len(messages) == 2
+    assert len(messages) == SINGLE_MESSAGE_COUNT
     assert messages[0]["role"] == "system"
     assert messages[0]["content"] == "Existing instructions"  # Preserved
     assert messages[1]["role"] == "user"

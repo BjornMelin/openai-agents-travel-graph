@@ -12,18 +12,11 @@ from typing import Any
 from langgraph.errors import GraphError, InterruptibleError, NodeError, ValidationError
 from langgraph.graph import END
 
-from travel_planner.agents.accommodation import AccommodationAgent
-from travel_planner.agents.activity_planning import ActivityPlanningAgent
-from travel_planner.agents.budget_management import BudgetManagementAgent
-from travel_planner.agents.destination_research import DestinationResearchAgent
-from travel_planner.agents.flight_search import FlightSearchAgent
-from travel_planner.agents.orchestrator import OrchestratorAgent
-from travel_planner.agents.transportation import TransportationAgent
 from travel_planner.data.models import TravelPlan, TravelQuery, UserPreferences
-from travel_planner.orchestration.state_graph import (
-    TravelPlanningState,
-    create_planning_graph,
-)
+from travel_planner.orchestration.core.agent_registry import register_default_agents
+from travel_planner.orchestration.core.graph_builder import create_planning_graph
+from travel_planner.orchestration.serialization.checkpoint import save_state_checkpoint
+from travel_planner.orchestration.states.planning_state import TravelPlanningState
 from travel_planner.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -42,13 +35,8 @@ class TravelWorkflow:
     
     def __init__(self):
         """Initialize the travel planning workflow."""
-        self.orchestrator = OrchestratorAgent()
-        self.destination_agent = DestinationResearchAgent()
-        self.flight_agent = FlightSearchAgent()
-        self.accommodation_agent = AccommodationAgent()
-        self.transportation_agent = TransportationAgent()
-        self.activity_agent = ActivityPlanningAgent()
-        self.budget_agent = BudgetManagementAgent()
+        # Register all default agents
+        register_default_agents()
         
         # Initialize the state graph
         self.graph = create_planning_graph()
@@ -145,9 +133,6 @@ class TravelWorkflow:
             if event['type'] == 'node' and event['node'] == END:
                 final_state = event['state']
                 break
-            
-            # Could add additional processing here for monitoring or
-            # capturing intermediate states if needed
         
         if final_state is None:
             raise RuntimeError("Workflow did not reach END state")
@@ -188,32 +173,28 @@ class TravelWorkflow:
             A partial travel plan with available information
         """
         # Create a plan with whatever information we have so far
-        partial_plan = TravelPlan()
-        
-        # Copy any existing information from the state
-        if state.plan:
-            # Copy all available attributes from the existing plan
-            for attr_name in state.plan.__annotations__:
-                if hasattr(state.plan, attr_name):
-                    value = getattr(state.plan, attr_name)
-                    if value is not None:
-                        setattr(partial_plan, attr_name, value)
+        partial_plan = state.plan or TravelPlan()
         
         # Add interruption metadata
-        partial_plan.metadata = {
+        partial_plan.metadata = partial_plan.metadata or {}
+        partial_plan.metadata.update({
             "interrupted": True,
             "interruption_reason": str(interrupt_error),
             "timestamp": datetime.now().isoformat(),
-            "current_stage": state.current_stage,
+            "current_stage": str(state.current_stage),
             "resumable": True,
-            "state_id": id(state)  # For referencing this state later
-        }
+            "checkpoint_id": state.checkpoint_id or f"auto_{datetime.now().strftime('%Y%m%d%H%M%S')}"
+        })
         
         # Add an alert about the interruption
-        partial_plan.alerts = [f"Note: This plan is incomplete due to an interruption: {interrupt_error!s}"]
+        if not partial_plan.alerts:
+            partial_plan.alerts = []
+        partial_plan.alerts.append(f"Note: This plan is incomplete due to an interruption: {interrupt_error!s}")
         
         # Store the interrupted state for possible resumption
-        self._store_interrupted_state(state)
+        if not state.checkpoint_id:
+            state.checkpoint_id = partial_plan.metadata["checkpoint_id"]
+            self._store_interrupted_state(state)
         
         return partial_plan
     
@@ -221,86 +202,65 @@ class TravelWorkflow:
         """
         Store an interrupted state for later resumption.
         
-        In a real implementation, this might persist the state to a database.
-        
         Args:
             state: The state to store
         """
-        # In a full implementation, this would store the state in a database
-        # or other persistent storage for later retrieval
-        state_id = id(state)
-        logger.info(f"Storing interrupted state with ID: {state_id}")
-        # For now, we'll just log it - in a real implementation, we'd store it
+        # Store using the checkpoint system
+        checkpoint_id = save_state_checkpoint(state)
+        logger.info(f"Stored interrupted state with checkpoint ID: {checkpoint_id}")
         
-    async def handle_interrupt(self, current_state: TravelPlanningState, update: dict[str, Any]) -> TravelPlanningState:
+    async def resume_workflow(self, checkpoint_id: str, updates: dict[str, Any] | None = None) -> TravelPlan:
         """
-        Handle workflow interruptions and state updates.
+        Resume an interrupted workflow from a checkpoint.
         
         Args:
-            current_state: Current state of the workflow
-            update: Update to apply to the state
+            checkpoint_id: ID of the checkpoint to resume from
+            updates: Optional updates to apply to the state
             
         Returns:
-            Updated state
+            Final travel plan after workflow completion
         """
-        logger.info(f"Handling interruption at stage: {current_state.current_stage}")
+        from travel_planner.orchestration.serialization.checkpoint import (
+            load_state_checkpoint,
+        )
         
-        # Add a special marker in the conversation history
-        current_state.conversation_history.append({
-            "role": "system",
-            "content": f"Workflow interrupted at stage: {current_state.current_stage}"
-        })
-        
-        # Apply the update to the current state
-        for key, value in update.items():
-            if hasattr(current_state, key):
-                setattr(current_state, key, value)
-                logger.debug(f"Updated {key} in interrupted state")
-        
-        # Check if we need to cancel or just pause
-        if update.get("cancel", False):
-            logger.info("Interruption requested workflow cancellation")
-            current_state.error = "Workflow cancelled by user request"
-        else:
-            logger.info("Interruption is a pause, workflow can be resumed")
-            
-        # Store the state for possible resumption
-        self._store_interrupted_state(current_state)
-            
-        return current_state
-        
-    async def resume_workflow(self, state: TravelPlanningState) -> TravelPlanningState:
-        """
-        Resume an interrupted workflow from the current state.
-        
-        Args:
-            state: Current state to resume from
-            
-        Returns:
-            Final state after workflow completion
-        """
-        logger.info(f"Resuming workflow from stage: {state.current_stage}")
-        
-        # Add a note about resumption to conversation history
-        state.conversation_history.append({
-            "role": "system",
-            "content": f"Resuming workflow from stage: {state.current_stage}"
-        })
+        logger.info(f"Resuming workflow from checkpoint: {checkpoint_id}")
         
         try:
-            # Determine where to resume from based on current stage
-            if state.current_stage == "query_analyzed":
-                # Skip query analysis and start from next stage
-                logger.info("Resuming after query analysis")
-                # In a full implementation, we'd modify the graph entry point
+            # Load the state from the checkpoint
+            state = load_state_checkpoint(checkpoint_id)
             
-            # Execute the graph with the current state
+            # Apply any updates to the state
+            if updates:
+                for key, value in updates.items():
+                    if hasattr(state, key):
+                        setattr(state, key, value)
+            
+            # Mark as no longer interrupted
+            state.interrupted = False
+            state.interruption_reason = None
+            
+            # Add a note about resumption to conversation history
+            state.conversation_history.append({
+                "role": "system",
+                "content": f"Resuming workflow from stage: {state.current_stage}"
+            })
+            
+            # Execute the graph with the resumed state
             resumed_state = await self._execute_graph(state)
             logger.info("Successfully resumed and completed workflow")
-            return resumed_state
-            
+            return resumed_state.plan
+                
         except Exception as e:
             logger.error(f"Error resuming workflow: {e!s}")
             logger.error(traceback.format_exc())
-            state.error = f"Resume error: {e!s}"
-            return state
+            error_plan = TravelPlan()
+            error_plan.metadata = {
+                "error": str(e),
+                "error_type": "resume_error",
+                "timestamp": datetime.now().isoformat(),
+                "status": "failed",
+                "checkpoint_id": checkpoint_id
+            }
+            error_plan.alerts = [f"Error resuming workflow: {e!s}"]
+            return error_plan

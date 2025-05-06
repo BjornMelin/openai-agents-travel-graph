@@ -60,8 +60,8 @@ class SupabaseClient:
         )
         
         # Import and use the setup module to maintain consistency
-        from travel_planner.data.setup import initialize_database
         from travel_planner.config import TravelPlannerConfig
+        from travel_planner.data.setup import initialize_database
         
         # Create a minimal config with just the necessary API information
         config = TravelPlannerConfig()

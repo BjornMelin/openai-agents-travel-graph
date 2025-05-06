@@ -1,0 +1,38 @@
+{
+  "openai": {
+    "requests_per_minute": 20,
+    "requests_per_day": 1000,
+    "max_retries": 3,
+    "min_wait_seconds": 1.0,
+    "max_wait_seconds": 30.0,
+    "retry_status_codes": [429, 500, 502, 503, 504],
+    "cooldown_after_quota": 60
+  },
+  "tavily": {
+    "requests_per_minute": 60,
+    "requests_per_day": 1000,
+    "max_retries": 3,
+    "min_wait_seconds": 1.0,
+    "max_wait_seconds": 30.0,
+    "retry_status_codes": [429, 500, 502, 503, 504],
+    "cooldown_after_quota": 60
+  },
+  "firecrawl": {
+    "requests_per_minute": 15,
+    "requests_per_day": 500,
+    "max_retries": 3,
+    "min_wait_seconds": 1.0,
+    "max_wait_seconds": 30.0,
+    "retry_status_codes": [429, 500, 502, 503, 504],
+    "cooldown_after_quota": 60
+  },
+  "supabase": {
+    "requests_per_minute": 100,
+    "requests_per_day": 5000,
+    "max_retries": 3,
+    "min_wait_seconds": 0.5,
+    "max_wait_seconds": 15.0,
+    "retry_status_codes": [429, 500, 502, 503, 504],
+    "cooldown_after_quota": 30
+  }
+}

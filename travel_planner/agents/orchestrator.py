@@ -6,15 +6,17 @@ of all specialized agents, manages the travel planning workflow, and ensures
 proper handoffs between different components of the system.
 """
 
-import asyncio
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Dict, List, Optional, Any, Union
+from typing import Any
 
-from loguru import logger
-
-from travel_planner.agents.base import BaseAgent, AgentConfig, AgentContext
-from travel_planner.utils import AgentLogger, handle_errors, AgentExecutionError, safe_serialize
+from travel_planner.agents.base import AgentConfig, AgentContext, BaseAgent
+from travel_planner.utils import (
+    AgentExecutionError,
+    AgentLogger,
+    handle_errors,
+    safe_serialize,
+)
 
 
 class PlanningStage(str, Enum):
@@ -32,18 +34,18 @@ class PlanningStage(str, Enum):
 @dataclass
 class TravelRequirements:
     """User's travel requirements."""
-    destination: Optional[str] = None
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
-    budget: Optional[float] = None
+    destination: str | None = None
+    start_date: str | None = None
+    end_date: str | None = None
+    budget: float | None = None
     currency: str = "USD"
     num_travelers: int = 1
-    accommodation_preferences: List[str] = field(default_factory=list)
-    transportation_preferences: List[str] = field(default_factory=list)
-    activity_preferences: List[str] = field(default_factory=list)
-    dietary_restrictions: List[str] = field(default_factory=list)
-    accessibility_needs: List[str] = field(default_factory=list)
-    additional_notes: Optional[str] = None
+    accommodation_preferences: list[str] = field(default_factory=list)
+    transportation_preferences: list[str] = field(default_factory=list)
+    activity_preferences: list[str] = field(default_factory=list)
+    dietary_restrictions: list[str] = field(default_factory=list)
+    accessibility_needs: list[str] = field(default_factory=list)
+    additional_notes: str | None = None
 
 
 @dataclass
@@ -52,16 +54,16 @@ class OrchestratorContext(AgentContext):
     session_id: str
     planning_stage: PlanningStage = PlanningStage.INITIAL
     travel_requirements: TravelRequirements = field(default_factory=TravelRequirements)
-    destination_details: Dict[str, Any] = field(default_factory=dict)
-    flight_options: List[Dict[str, Any]] = field(default_factory=list)
-    accommodation_options: List[Dict[str, Any]] = field(default_factory=list)
-    transportation_options: List[Dict[str, Any]] = field(default_factory=list)
-    activity_options: List[Dict[str, Any]] = field(default_factory=list)
-    budget_allocation: Dict[str, float] = field(default_factory=dict)
-    selected_options: Dict[str, Any] = field(default_factory=dict)
-    user_feedback: Dict[str, Any] = field(default_factory=dict)
-    final_itinerary: Dict[str, Any] = field(default_factory=dict)
-    conversation_history: List[Dict[str, Any]] = field(default_factory=list)
+    destination_details: dict[str, Any] = field(default_factory=dict)
+    flight_options: list[dict[str, Any]] = field(default_factory=list)
+    accommodation_options: list[dict[str, Any]] = field(default_factory=list)
+    transportation_options: list[dict[str, Any]] = field(default_factory=list)
+    activity_options: list[dict[str, Any]] = field(default_factory=list)
+    budget_allocation: dict[str, float] = field(default_factory=dict)
+    selected_options: dict[str, Any] = field(default_factory=dict)
+    user_feedback: dict[str, Any] = field(default_factory=dict)
+    final_itinerary: dict[str, Any] = field(default_factory=dict)
+    conversation_history: list[dict[str, Any]] = field(default_factory=list)
 
 
 class OrchestratorAgent(BaseAgent[OrchestratorContext]):
@@ -76,7 +78,7 @@ class OrchestratorAgent(BaseAgent[OrchestratorContext]):
     5. Handling exceptions and fallbacks from other agents
     """
     
-    def __init__(self, config: Optional[AgentConfig] = None):
+    def __init__(self, config: AgentConfig | None = None):
         """
         Initialize the orchestrator agent.
         
@@ -98,9 +100,9 @@ class OrchestratorAgent(BaseAgent[OrchestratorContext]):
     
     async def run(
         self, 
-        input_data: Union[str, List[Dict[str, Any]]], 
-        context: Optional[OrchestratorContext] = None
-    ) -> Dict[str, Any]:
+        input_data: str | list[dict[str, Any]], 
+        context: OrchestratorContext | None = None
+    ) -> dict[str, Any]:
         """
         Run the orchestrator agent with the provided input and context.
         
@@ -135,16 +137,16 @@ class OrchestratorAgent(BaseAgent[OrchestratorContext]):
                 "response": response,
             }
         except Exception as e:
-            error_msg = f"Error in orchestrator agent: {str(e)}"
+            error_msg = f"Error in orchestrator agent: {e!s}"
             self.logger.error(error_msg)
             raise AgentExecutionError(error_msg, self.name, original_error=e)
     
     @handle_errors(error_cls=AgentExecutionError)
     async def process(
         self, 
-        input_data: Union[str, List[Dict[str, Any]]], 
+        input_data: str | list[dict[str, Any]], 
         context: OrchestratorContext
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Process the input based on the current planning stage.
         
@@ -186,7 +188,7 @@ class OrchestratorAgent(BaseAgent[OrchestratorContext]):
     
     async def _extract_requirements(
         self, 
-        input_data: Union[str, List[Dict[str, Any]]], 
+        input_data: str | list[dict[str, Any]], 
         current_requirements: TravelRequirements
     ) -> TravelRequirements:
         """
@@ -228,16 +230,16 @@ class OrchestratorAgent(BaseAgent[OrchestratorContext]):
         try:
             # Implementation depends on the actual API response format
             # This is a simplified approach
-            content = response.get("content", "")
+            response.get("content", "")
             
             # If the model didn't return valid JSON, we'll use the existing requirements
             return current_requirements
             
         except Exception as e:
-            self.logger.error(f"Error extracting requirements: {str(e)}")
+            self.logger.error(f"Error extracting requirements: {e!s}")
             return current_requirements
     
-    async def _update_planning_stage(self, context: OrchestratorContext, response: Dict[str, Any]) -> None:
+    async def _update_planning_stage(self, context: OrchestratorContext, response: dict[str, Any]) -> None:
         """
         Update the planning stage based on the agent's response.
         
@@ -264,7 +266,7 @@ class OrchestratorAgent(BaseAgent[OrchestratorContext]):
             context.planning_stage = stage_progression[current_stage]
             self.logger.info(f"Updating planning stage from {current_stage} to {context.planning_stage}")
     
-    def _get_latest_user_input(self, messages: List[Dict[str, Any]]) -> str:
+    def _get_latest_user_input(self, messages: list[dict[str, Any]]) -> str:
         """
         Extract the latest user input from a list of messages.
         
@@ -279,7 +281,7 @@ class OrchestratorAgent(BaseAgent[OrchestratorContext]):
                 return message.get("content", "")
         return ""
     
-    async def _call_model(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def _call_model(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Call the OpenAI API with the given messages.
         
@@ -318,5 +320,5 @@ class OrchestratorAgent(BaseAgent[OrchestratorContext]):
             return {"content": "No response generated."}
             
         except Exception as e:
-            self.logger.error(f"Error calling model: {str(e)}")
+            self.logger.error(f"Error calling model: {e!s}")
             raise

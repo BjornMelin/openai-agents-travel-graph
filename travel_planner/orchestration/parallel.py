@@ -11,11 +11,10 @@ from collections.abc import Callable
 from enum import Enum
 from typing import Any, TypeVar
 
-from langgraph.graph.branches.parallel import ParallelBranch
 from pydantic import BaseModel
 
 from travel_planner.agents.base import BaseAgent
-from travel_planner.orchestration.state_graph import TravelPlanningState
+from travel_planner.orchestration.states.planning_state import TravelPlanningState
 from travel_planner.utils.logging import get_logger
 
 # Type for state update functions
@@ -40,206 +39,6 @@ class ParallelResult(BaseModel):
     result: dict[str, Any]
     error: str | None = None
     completed: bool = False
-
-
-def create_parallel_branch(state: TravelPlanningState) -> ParallelBranch:
-    """
-    Create a parallel branch for executing multiple agents simultaneously.
-    
-    This function creates a LangGraph ParallelBranch that enables concurrent execution
-    of multiple agents, allowing faster processing of independent tasks.
-    
-    Args:
-        state: Current travel planning state
-        
-    Returns:
-        ParallelBranch instance with agents to execute in parallel
-    """
-    # Create a parallel branch for travel planning tasks
-    branch = ParallelBranch("parallel_planning")
-    
-    # Add nodes for different aspects of travel planning that can run in parallel
-    branch.add_node(ParallelTask.FLIGHT_SEARCH.value, flight_search_task)
-    branch.add_node(ParallelTask.ACCOMMODATION.value, accommodation_task)
-    branch.add_node(ParallelTask.TRANSPORTATION.value, transportation_task)
-    branch.add_node(ParallelTask.ACTIVITIES.value, activities_task)
-    
-    return branch
-
-
-def flight_search_task(state: TravelPlanningState) -> dict[str, ParallelResult]:
-    """
-    Execute flight search task in parallel branch.
-    
-    Args:
-        state: Current travel planning state
-        
-    Returns:
-        Dictionary with task results
-    """
-    from travel_planner.agents.flight_search import FlightSearchAgent
-    
-    try:
-        agent = FlightSearchAgent()
-        result = agent.invoke(state)
-        
-        return {
-            "result": ParallelResult(
-                task_type=ParallelTask.FLIGHT_SEARCH,
-                result=result,
-                completed=True
-            )
-        }
-    except Exception as e:
-        logger.error(f"Error in flight search task: {e!s}")
-        return {
-            "result": ParallelResult(
-                task_type=ParallelTask.FLIGHT_SEARCH,
-                result={},
-                error=str(e),
-                completed=False
-            )
-        }
-
-
-def accommodation_task(state: TravelPlanningState) -> dict[str, ParallelResult]:
-    """
-    Execute accommodation search task in parallel branch.
-    
-    Args:
-        state: Current travel planning state
-        
-    Returns:
-        Dictionary with task results
-    """
-    from travel_planner.agents.accommodation import AccommodationAgent
-    
-    try:
-        agent = AccommodationAgent()
-        result = agent.invoke(state)
-        
-        return {
-            "result": ParallelResult(
-                task_type=ParallelTask.ACCOMMODATION,
-                result=result,
-                completed=True
-            )
-        }
-    except Exception as e:
-        logger.error(f"Error in accommodation task: {e!s}")
-        return {
-            "result": ParallelResult(
-                task_type=ParallelTask.ACCOMMODATION,
-                result={},
-                error=str(e),
-                completed=False
-            )
-        }
-
-
-def transportation_task(state: TravelPlanningState) -> dict[str, ParallelResult]:
-    """
-    Execute transportation planning task in parallel branch.
-    
-    Args:
-        state: Current travel planning state
-        
-    Returns:
-        Dictionary with task results
-    """
-    from travel_planner.agents.transportation import TransportationAgent
-    
-    try:
-        agent = TransportationAgent()
-        result = agent.invoke(state)
-        
-        return {
-            "result": ParallelResult(
-                task_type=ParallelTask.TRANSPORTATION,
-                result=result,
-                completed=True
-            )
-        }
-    except Exception as e:
-        logger.error(f"Error in transportation task: {e!s}")
-        return {
-            "result": ParallelResult(
-                task_type=ParallelTask.TRANSPORTATION,
-                result={},
-                error=str(e),
-                completed=False
-            )
-        }
-
-
-def activities_task(state: TravelPlanningState) -> dict[str, ParallelResult]:
-    """
-    Execute activity planning task in parallel branch.
-    
-    Args:
-        state: Current travel planning state
-        
-    Returns:
-        Dictionary with task results
-    """
-    from travel_planner.agents.activity_planning import ActivityPlanningAgent
-    
-    try:
-        agent = ActivityPlanningAgent()
-        result = agent.invoke(state)
-        
-        return {
-            "result": ParallelResult(
-                task_type=ParallelTask.ACTIVITIES,
-                result=result,
-                completed=True
-            )
-        }
-    except Exception as e:
-        logger.error(f"Error in activities task: {e!s}")
-        return {
-            "result": ParallelResult(
-                task_type=ParallelTask.ACTIVITIES,
-                result={},
-                error=str(e),
-                completed=False
-            )
-        }
-
-
-def budget_task(state: TravelPlanningState) -> dict[str, ParallelResult]:
-    """
-    Execute budget management task (this usually runs after other tasks are complete).
-    
-    Args:
-        state: Current travel planning state
-        
-    Returns:
-        Dictionary with task results
-    """
-    from travel_planner.agents.budget_management import BudgetManagementAgent
-    
-    try:
-        agent = BudgetManagementAgent()
-        result = agent.invoke(state)
-        
-        return {
-            "result": ParallelResult(
-                task_type=ParallelTask.BUDGET,
-                result=result,
-                completed=True
-            )
-        }
-    except Exception as e:
-        logger.error(f"Error in budget task: {e!s}")
-        return {
-            "result": ParallelResult(
-                task_type=ParallelTask.BUDGET,
-                result={},
-                error=str(e),
-                completed=False
-            )
-        }
 
 
 async def execute_in_parallel(
@@ -324,7 +123,8 @@ async def parallel_search_tasks(state: TravelPlanningState) -> TravelPlanningSta
     updated_state = merge_parallel_results(state, results)
     
     # Update the current stage
-    updated_state.current_stage = "parallel_search_completed"
+    from travel_planner.orchestration.states.workflow_stages import WorkflowStage
+    updated_state.current_stage = WorkflowStage.PARALLEL_SEARCH_COMPLETED
     
     logger.info("Parallel search tasks completed")
     return updated_state
@@ -473,6 +273,7 @@ def combine_parallel_branch_results(state: TravelPlanningState, branch_results: 
         updated_state.plan.alerts.extend(errors)
     
     # Update the current stage
-    updated_state.current_stage = "parallel_tasks_completed"
+    from travel_planner.orchestration.states.workflow_stages import WorkflowStage
+    updated_state.current_stage = WorkflowStage.PARALLEL_SEARCH_COMPLETED
     
     return updated_state

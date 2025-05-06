@@ -9,11 +9,12 @@ import os
 from typing import Any
 
 from travel_planner.utils.logging import get_logger
+from travel_planner.utils.rate_limiting import APIClient, rate_limited
 
 logger = get_logger(__name__)
 
 
-class TavilyResearch:
+class TavilyResearch(APIClient):
     """Integration with Tavily AI search for travel research."""
     
     def __init__(self, api_key: str | None = None):
@@ -23,13 +24,19 @@ class TavilyResearch:
         Args:
             api_key: Tavily API key (defaults to TAVILY_API_KEY environment variable)
         """
-        self.api_key = api_key or os.environ.get("TAVILY_API_KEY")
+        api_key = api_key or os.environ.get("TAVILY_API_KEY")
         
-        if not self.api_key:
+        if not api_key:
             raise ValueError(
                 "Tavily API key must be provided either as an argument or "
                 "as TAVILY_API_KEY environment variable"
             )
+            
+        super().__init__(
+            service_name="tavily",
+            base_url="https://api.tavily.com/v1",
+            api_key=api_key
+        )
             
     async def search(
         self, 
@@ -204,9 +211,10 @@ class TavilyResearch:
         
         return processed
     
+    @rate_limited("tavily")
     async def _call_tavily_mcp(self, request: dict[str, Any]) -> dict[str, Any]:
         """
-        Call Tavily using the MCP tool.
+        Call Tavily using rate limiting and exponential backoff.
         
         Args:
             request: Request parameters
@@ -214,30 +222,47 @@ class TavilyResearch:
         Returns:
             Search results
         """
-        # In a real implementation, this would use the MCP tool
-        # Here we'll return mock results for demonstration
+        logger.info(f"Calling Tavily API with query: {request.get('query', 'unknown')}")
         
-        mock_results = {
-            "results": [
-                {
-                    "title": "Sample Search Result 1",
-                    "url": "https://example.com/result1",
-                    "content": "This is a sample search result about travel destinations."
-                },
-                {
-                    "title": "Sample Search Result 2",
-                    "url": "https://example.com/result2",
-                    "content": "Another sample search result with information about attractions."
-                }
-            ],
-            "query": request["query"],
-            "search_depth": request["search_depth"]
-        }
-        
-        return mock_results
+        try:
+            # In a real implementation, we would use the request method from the APIClient
+            # return await self.request(
+            #     method="POST",
+            #     endpoint="search",
+            #     json_data=request
+            # )
+            
+            # For now, return mock results
+            mock_results = {
+                "results": [
+                    {
+                        "title": "Sample Search Result 1",
+                        "url": "https://example.com/result1",
+                        "content": "This is a sample search result about travel destinations."
+                    },
+                    {
+                        "title": "Sample Search Result 2",
+                        "url": "https://example.com/result2",
+                        "content": "Another sample search result with information about attractions."
+                    }
+                ],
+                "query": request["query"],
+                "search_depth": request["search_depth"]
+            }
+            
+            return mock_results
+            
+        except Exception as e:
+            logger.error(f"Error calling Tavily API: {e}")
+            # Return minimal results as fallback
+            return {
+                "results": [],
+                "query": request.get("query", "unknown"),
+                "error": str(e)
+            }
 
 
-class FirecrawlResearch:
+class FirecrawlResearch(APIClient):
     """Integration with Firecrawl for in-depth web research."""
     
     def __init__(self, api_key: str | None = None):
@@ -247,13 +272,19 @@ class FirecrawlResearch:
         Args:
             api_key: Firecrawl API key (defaults to FIRECRAWL_API_KEY environment variable)
         """
-        self.api_key = api_key or os.environ.get("FIRECRAWL_API_KEY")
+        api_key = api_key or os.environ.get("FIRECRAWL_API_KEY")
         
-        if not self.api_key:
+        if not api_key:
             raise ValueError(
                 "Firecrawl API key must be provided either as an argument or "
                 "as FIRECRAWL_API_KEY environment variable"
             )
+            
+        super().__init__(
+            service_name="firecrawl",
+            base_url="https://api.firecrawl.dev/v1",
+            api_key=api_key
+        )
             
     async def deep_research(
         self,
@@ -412,13 +443,14 @@ class FirecrawlResearch:
         # Use the MCP tool to perform the search
         return await self._call_firecrawl_mcp("firecrawl_search", request)
     
+    @rate_limited("firecrawl")
     async def _call_firecrawl_mcp(
         self,
         function_name: str,
         request: dict[str, Any]
     ) -> dict[str, Any]:
         """
-        Call Firecrawl using the MCP tool.
+        Call Firecrawl using rate limiting and exponential backoff.
         
         Args:
             function_name: Firecrawl function name
@@ -427,67 +459,84 @@ class FirecrawlResearch:
         Returns:
             Function results
         """
-        # In a real implementation, this would use the MCP tool
-        # Here we'll return mock results for demonstration
+        logger.info(f"Calling Firecrawl API function {function_name}")
         
-        if function_name == "firecrawl_deep_research":
-            return {
-                "summary": "Sample deep research results about travel destinations.",
-                "keyInsights": [
-                    "Key insight 1 about the destination.",
-                    "Key insight 2 about travel tips.",
-                    "Key insight 3 about local attractions."
-                ],
-                "sources": [
-                    {"url": "https://example.com/travel1", "title": "Travel Example 1"},
-                    {"url": "https://example.com/travel2", "title": "Travel Example 2"}
-                ]
-            }
-        elif function_name == "firecrawl_crawl":
-            return {
-                "crawlId": "sample-crawl-id",
-                "status": "completed",
-                "urlsCrawled": 5,
-                "results": [
-                    {"url": "https://example.com/travel/page1", "content": "Sample content 1"},
-                    {"url": "https://example.com/travel/page2", "content": "Sample content 2"}
-                ]
-            }
-        elif function_name == "firecrawl_extract":
-            return {
-                "extractions": [
-                    {
-                        "url": "https://example.com/destination1",
-                        "data": {
-                            "name": "Sample Destination",
-                            "country": "Sample Country",
-                            "description": "A beautiful destination with many attractions.",
-                            "attractions": ["Attraction 1", "Attraction 2", "Attraction 3"],
-                            "best_time_to_visit": "Spring and Fall",
-                            "safety_level": "High",
-                            "budget_category": "Mid-range",
-                            "transportation_options": ["Bus", "Taxi", "Metro"]
+        try:
+            # In a real implementation, we would use the request method from the APIClient
+            # endpoint = f"{function_name.replace('firecrawl_', '')}"
+            # return await self.request(
+            #     method="POST",
+            #     endpoint=endpoint,
+            #     json_data=request
+            # )
+            
+            # Return mock results for demonstration
+            if function_name == "firecrawl_deep_research":
+                return {
+                    "summary": "Sample deep research results about travel destinations.",
+                    "keyInsights": [
+                        "Key insight 1 about the destination.",
+                        "Key insight 2 about travel tips.",
+                        "Key insight 3 about local attractions."
+                    ],
+                    "sources": [
+                        {"url": "https://example.com/travel1", "title": "Travel Example 1"},
+                        {"url": "https://example.com/travel2", "title": "Travel Example 2"}
+                    ]
+                }
+            elif function_name == "firecrawl_crawl":
+                return {
+                    "crawlId": "sample-crawl-id",
+                    "status": "completed",
+                    "urlsCrawled": 5,
+                    "results": [
+                        {"url": "https://example.com/travel/page1", "content": "Sample content 1"},
+                        {"url": "https://example.com/travel/page2", "content": "Sample content 2"}
+                    ]
+                }
+            elif function_name == "firecrawl_extract":
+                return {
+                    "extractions": [
+                        {
+                            "url": "https://example.com/destination1",
+                            "data": {
+                                "name": "Sample Destination",
+                                "country": "Sample Country",
+                                "description": "A beautiful destination with many attractions.",
+                                "attractions": ["Attraction 1", "Attraction 2", "Attraction 3"],
+                                "best_time_to_visit": "Spring and Fall",
+                                "safety_level": "High",
+                                "budget_category": "Mid-range",
+                                "transportation_options": ["Bus", "Taxi", "Metro"]
+                            }
                         }
-                    }
-                ]
-            }
-        elif function_name == "firecrawl_search":
+                    ]
+                }
+            elif function_name == "firecrawl_search":
+                return {
+                    "results": [
+                        {
+                            "title": "Sample Travel Search Result 1",
+                            "url": "https://example.com/travel-result1",
+                            "content": "This is a sample travel search result."
+                        },
+                        {
+                            "title": "Sample Travel Search Result 2",
+                            "url": "https://example.com/travel-result2",
+                            "content": "Another sample travel search result."
+                        }
+                    ]
+                }
+            else:
+                return {"error": f"Unknown function: {function_name}"}
+                
+        except Exception as e:
+            logger.error(f"Error calling Firecrawl API function {function_name}: {e}")
+            # Return minimal results as fallback
             return {
-                "results": [
-                    {
-                        "title": "Sample Travel Search Result 1",
-                        "url": "https://example.com/travel-result1",
-                        "content": "This is a sample travel search result."
-                    },
-                    {
-                        "title": "Sample Travel Search Result 2",
-                        "url": "https://example.com/travel-result2",
-                        "content": "Another sample travel search result."
-                    }
-                ]
+                "error": str(e),
+                "function": function_name
             }
-        else:
-            return {"error": f"Unknown function: {function_name}"}
 
 
 class DestinationResearchTools:

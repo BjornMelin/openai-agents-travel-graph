@@ -9,7 +9,7 @@ error recovery.
 import json
 import os
 from datetime import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any
 
 from travel_planner.data.models import TravelPlan, TravelQuery, UserPreferences
 from travel_planner.orchestration.state_graph import TravelPlanningState, WorkflowStage
@@ -29,7 +29,7 @@ class CheckpointManager:
     disk, load them for workflow resumption, and manage checkpoint cleanup.
     """
     
-    def __init__(self, checkpoint_dir: Optional[str] = None):
+    def __init__(self, checkpoint_dir: str | None = None):
         """
         Initialize the checkpoint manager.
         
@@ -42,7 +42,7 @@ class CheckpointManager:
         os.makedirs(self.checkpoint_dir, exist_ok=True)
         
         # Keep track of active checkpoints
-        self.active_checkpoints: Dict[str, Dict[str, Any]] = {}
+        self.active_checkpoints: dict[str, dict[str, Any]] = {}
     
     def save_checkpoint(self, state: TravelPlanningState) -> str:
         """
@@ -97,7 +97,7 @@ class CheckpointManager:
                 raise ValueError(f"Checkpoint {checkpoint_id} not found")
             
             # Load checkpoint data
-            with open(checkpoint_path, "r") as f:
+            with open(checkpoint_path) as f:
                 checkpoint_data = json.load(f)
             
             # Add to in-memory cache
@@ -111,8 +111,8 @@ class CheckpointManager:
         return state
     
     def list_checkpoints(self, 
-                        stage: Optional[str] = None, 
-                        limit: int = 10) -> List[Dict[str, Any]]:
+                        stage: str | None = None, 
+                        limit: int = 10) -> list[dict[str, Any]]:
         """
         List available checkpoints with optional filtering.
         
@@ -133,7 +133,7 @@ class CheckpointManager:
             checkpoint_path = os.path.join(self.checkpoint_dir, filename)
             
             try:
-                with open(checkpoint_path, "r") as f:
+                with open(checkpoint_path) as f:
                     metadata = json.load(f)
                     
                     # Apply stage filter if provided
@@ -208,7 +208,7 @@ class CheckpointManager:
                 
                 if age_days > max_age_days:
                     # Load the file to get checkpoint ID
-                    with open(checkpoint_path, "r") as f:
+                    with open(checkpoint_path) as f:
                         metadata = json.load(f)
                         checkpoint_id = metadata.get("checkpoint_id")
                     
@@ -222,7 +222,7 @@ class CheckpointManager:
         return deleted_count
     
     def _reconstruct_state_from_checkpoint(self, 
-                                          checkpoint_data: Dict[str, Any]) -> TravelPlanningState:
+                                          checkpoint_data: dict[str, Any]) -> TravelPlanningState:
         """
         Reconstruct a TravelPlanningState from checkpoint data.
         
@@ -316,7 +316,7 @@ def load_state_checkpoint(checkpoint_id: str) -> TravelPlanningState:
     return default_checkpoint_manager.load_checkpoint(checkpoint_id)
 
 
-def list_state_checkpoints(stage: Optional[str] = None, limit: int = 10) -> List[Dict[str, Any]]:
+def list_state_checkpoints(stage: str | None = None, limit: int = 10) -> list[dict[str, Any]]:
     """
     List available checkpoints with optional filtering using the default manager.
     

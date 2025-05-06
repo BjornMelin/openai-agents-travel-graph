@@ -13,7 +13,7 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 
-from travel_planner.config import initialize_config, TravelPlannerConfig
+from travel_planner.config import TravelPlannerConfig, initialize_config
 from travel_planner.data.supabase import SupabaseClient
 from travel_planner.utils.logging import get_logger, setup_logging
 
@@ -98,7 +98,7 @@ async def apply_migrations(client: SupabaseClient, reset: bool = False) -> None:
         logger.info(f"Applying migration: {migration_file.name}")
         
         # Read the SQL file
-        with open(migration_file, "r") as f:
+        with open(migration_file) as f:
             sql = f.read()
         
         # Execute the SQL

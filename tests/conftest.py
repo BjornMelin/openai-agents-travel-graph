@@ -2,15 +2,13 @@
 Pytest configuration for the Travel Planner system tests.
 """
 
-import os
-import pytest
 from unittest.mock import AsyncMock, MagicMock
 
-import openai
+import pytest
 
-from travel_planner.config import TravelPlannerConfig, APIConfig, SystemConfig
-from travel_planner.utils import setup_logging, LogLevel
 from travel_planner.agents.base import AgentConfig
+from travel_planner.config import APIConfig, SystemConfig, TravelPlannerConfig
+from travel_planner.utils import LogLevel, setup_logging
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -25,7 +23,6 @@ def mock_openai_client():
     mock_client = MagicMock()
     
     # Mock the chat completions create method
-    mock_chat = MagicMock()
     mock_client.chat.completions.create = AsyncMock()
     
     # Set up a basic response structure
