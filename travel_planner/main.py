@@ -20,7 +20,7 @@ from travel_planner.agents.destination_research import DestinationResearchAgent
 from travel_planner.agents.flight_search import FlightSearchAgent
 from travel_planner.agents.research_tools import DestinationResearchTools
 from travel_planner.agents.transportation import TransportationAgent
-from travel_planner.config import initialize_config
+from travel_planner.config import initialize_config, TravelPlannerConfig
 from travel_planner.data.models import TravelPlan, TravelQuery
 from travel_planner.data.supabase import SupabaseClient
 from travel_planner.orchestration.state_graph import TravelPlanningState
@@ -980,18 +980,34 @@ def main() -> int:
     parser = setup_argparse()
     args = parser.parse_args()
 
-    # Initialize configuration
-    system_config = initialize_config(custom_config_path=args.config)
-
-    # Setup logging
-    setup_logging(
-        log_level=args.log_level or system_config.system.log_level,
-        log_file=args.log_file,
-    )
-
+    # Setup basic logging first to capture any initialization errors
+    setup_logging(log_level=args.log_level or "INFO", log_file=args.log_file)
     logger.info("Starting AI Travel Planning System")
 
     try:
+        # Initialize configuration with validation
+        system_config = initialize_config(
+            custom_config_path=args.config, 
+            validate=True, 
+            raise_on_error=False
+        )
+
+        # Enhance logging setup now that we have the full configuration
+        setup_logging(
+            log_level=args.log_level or system_config.system.log_level,
+            log_file=args.log_file,
+        )
+
+        # Check if we are missing required API keys before proceeding
+        if not system_config.api.validate():
+            print("\nERROR: Missing required API keys. Please configure your environment:")
+            print("  - OPENAI_API_KEY: Required for AI agent functionality")
+            print("  - SUPABASE_URL: Required for data persistence")
+            print("  - SUPABASE_KEY: Required for data persistence")
+            print("\nYou can set these in a .env file in the project root directory.")
+            print("See the README.md for setup instructions.\n")
+            return 1
+
         # Determine if we should run in query mode (any query-related argument provided)
         query_mode = any(
             [
@@ -1023,13 +1039,23 @@ def main() -> int:
             asyncio.run(run_interactive_mode(args))
 
         return 0
+    except TravelPlannerConfig.ConfigurationError as e:
+        logger.error(f"Configuration error: {e}")
+        print(f"\nConfiguration Error: {e}")
+        print("Please check your environment variables and configuration settings.")
+        return 1
     except KeyboardInterrupt:
         logger.info("Travel planning session interrupted by user")
         print("\nTravel planning session interrupted. Goodbye!")
         return 0
+    except FileNotFoundError as e:
+        logger.error(f"File not found: {e}")
+        print(f"\nError: {e}")
+        return 1
     except Exception as e:
         logger.error(f"Error in main function: {e!s}\n{traceback.format_exc()}")
-        print(f"Error: {e!s}")
+        print(f"\nError: {e!s}")
+        print("An unexpected error occurred. Please check the logs for more details.")
         return 1
 
 

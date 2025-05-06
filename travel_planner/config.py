@@ -8,13 +8,11 @@ and default settings for agents and services.
 
 import os
 from dataclasses import dataclass, field
-from typing import Dict, List, Optional, Any
 from enum import Enum
 
 from dotenv import load_dotenv
-from pydantic import BaseModel, Field, field_validator
 from loguru import logger
-
+from pydantic import BaseModel, Field, field_validator
 
 # Load environment variables from .env file
 load_dotenv()
@@ -34,7 +32,7 @@ class BrowserConfig(BaseModel):
     headless: bool = Field(default=True, description="Run browser in headless mode")
     cache_ttl: int = Field(default=3600, description="Cache time to live in seconds")
     timeout: int = Field(default=30000, description="Default timeout in milliseconds")
-    user_agent: Optional[str] = Field(default=None, description="Custom user agent string")
+    user_agent: str | None = Field(default=None, description="Custom user agent string")
     
     @classmethod
     def from_env(cls) -> "BrowserConfig":
@@ -51,7 +49,7 @@ class AgentModelConfig(BaseModel):
     """Configuration for an agent's LLM model."""
     name: str = Field(..., description="Model name to use")
     temperature: float = Field(default=0.7, description="Model temperature")
-    max_tokens: Optional[int] = Field(default=None, description="Max tokens to generate")
+    max_tokens: int | None = Field(default=None, description="Max tokens to generate")
     
     @field_validator("temperature")
     @classmethod
@@ -77,8 +75,18 @@ class APIConfig(BaseModel):
     openai_api_key: str = Field(..., description="OpenAI API key")
     supabase_url: str = Field(..., description="Supabase URL")
     supabase_key: str = Field(..., description="Supabase API key")
-    tavily_api_key: Optional[str] = Field(default=None, description="Tavily API key")
-    firecrawl_api_key: Optional[str] = Field(default=None, description="Firecrawl API key")
+    tavily_api_key: str | None = Field(default=None, description="Tavily API key")
+    firecrawl_api_key: str | None = Field(default=None, description="Firecrawl API key")
+    
+    class ValidationError(Exception):
+        """Exception raised for API configuration validation errors."""
+        def __init__(self, missing_keys: list[str], optional_missing: list[str] = None):
+            self.missing_keys = missing_keys
+            self.optional_missing = optional_missing or []
+            message = f"Missing required API keys: {', '.join(missing_keys)}"
+            if optional_missing:
+                message += f". Optional keys missing: {', '.join(optional_missing)}"
+            super().__init__(message)
     
     @classmethod
     def from_env(cls) -> "APIConfig":
@@ -91,19 +99,50 @@ class APIConfig(BaseModel):
             firecrawl_api_key=os.getenv("FIRECRAWL_API_KEY"),
         )
     
-    def validate(self) -> bool:
-        """Validate that required API keys are present."""
+    def validate(self, raise_error: bool = False) -> bool:
+        """
+        Validate that required API keys are present.
+        
+        Args:
+            raise_error: If True, raise ValidationError instead of returning False
+            
+        Returns:
+            True if all required keys are present, False otherwise
+            
+        Raises:
+            ValidationError: If raise_error is True and validation fails
+        """
         missing_keys = []
+        optional_missing = []
+        
+        # Required keys
         if not self.openai_api_key:
             missing_keys.append("OPENAI_API_KEY")
         if not self.supabase_url:
             missing_keys.append("SUPABASE_URL")
         if not self.supabase_key:
             missing_keys.append("SUPABASE_KEY")
+        
+        # Optional keys
+        if not self.tavily_api_key:
+            optional_missing.append("TAVILY_API_KEY")
+        if not self.firecrawl_api_key:
+            optional_missing.append("FIRECRAWL_API_KEY")
             
         if missing_keys:
-            logger.error(f"Missing required API keys: {', '.join(missing_keys)}")
+            error_msg = f"Missing required API keys: {', '.join(missing_keys)}"
+            if optional_missing:
+                logger.warning(f"Optional API keys missing: {', '.join(optional_missing)}. Some features may be limited.")
+            
+            logger.error(error_msg)
+            
+            if raise_error:
+                raise self.ValidationError(missing_keys, optional_missing)
             return False
+            
+        if optional_missing:
+            logger.warning(f"Optional API keys missing: {', '.join(optional_missing)}. Some features may be limited.")
+            
         return True
 
 
@@ -133,7 +172,7 @@ class TravelPlannerConfig:
     api: APIConfig = field(default_factory=APIConfig.from_env)
     system: SystemConfig = field(default_factory=SystemConfig.from_env)
     browser: BrowserConfig = field(default_factory=BrowserConfig.from_env)
-    agent_models: Dict[str, AgentModelConfig] = field(default_factory=dict)
+    agent_models: dict[str, AgentModelConfig] = field(default_factory=dict)
     
     def __post_init__(self):
         """Initialize agent models if not provided."""
@@ -148,12 +187,59 @@ class TravelPlannerConfig:
                 "budget": AgentModelConfig.from_env("BUDGET"),
             }
     
-    def validate(self) -> bool:
-        """Validate the entire configuration."""
-        return self.api.validate()
+    class ConfigurationError(Exception):
+        """Exception raised for configuration validation errors."""
+        pass
+
+    def validate(self, raise_error: bool = False) -> bool:
+        """
+        Validate the entire configuration.
+        
+        Args:
+            raise_error: If True, raise ConfigurationError instead of returning False
+            
+        Returns:
+            True if configuration is valid, False otherwise
+            
+        Raises:
+            ConfigurationError: If raise_error is True and validation fails
+        """
+        try:
+            # Validate API configuration
+            api_valid = self.api.validate(raise_error=True)
+            
+            # Validate browser configuration
+            if self.browser.timeout <= 0:
+                raise ValueError("Browser timeout must be positive")
+                
+            # Validate system configuration
+            if self.system.max_concurrency <= 0:
+                raise ValueError("Max concurrency must be positive")
+            
+            return True
+            
+        except Exception as e:
+            if isinstance(e, self.api.ValidationError):
+                # Already logged in APIConfig.validate
+                pass
+            else:
+                logger.error(f"Configuration validation failed: {str(e)}")
+                
+            if raise_error:
+                raise self.ConfigurationError(f"Configuration validation failed: {str(e)}") from e
+                
+            return False
     
     def get_agent_model(self, agent_type: str) -> AgentModelConfig:
-        """Get model configuration for a specific agent type."""
+        """
+        Get model configuration for a specific agent type.
+        
+        Args:
+            agent_type: Type of agent to get model config for
+            
+        Returns:
+            AgentModelConfig for the requested agent type, or a default if not found
+        """
         return self.agent_models.get(agent_type, self.agent_models.get("default", AgentModelConfig(name="gpt-4o")))
 
 
@@ -161,8 +247,53 @@ class TravelPlannerConfig:
 config = TravelPlannerConfig()
 
 
-def initialize_config() -> TravelPlannerConfig:
-    """Initialize and validate the configuration."""
-    if not config.validate():
-        logger.warning("Configuration validation failed, some features may not work correctly")
+def initialize_config(custom_config_path: str | None = None, validate: bool = True, raise_on_error: bool = False) -> TravelPlannerConfig:
+    """
+    Initialize and validate the configuration.
+    
+    Args:
+        custom_config_path: Path to a custom .env file to load
+        validate: Whether to validate the configuration
+        raise_on_error: Whether to raise an exception on validation failure
+        
+    Returns:
+        Initialized and validated configuration object
+        
+    Raises:
+        TravelPlannerConfig.ConfigurationError: If validation fails and raise_on_error is True
+        FileNotFoundError: If custom_config_path is provided but does not exist
+    """
+    # Load custom .env file if provided
+    if custom_config_path:
+        if not os.path.exists(custom_config_path):
+            error_msg = f"Custom configuration file not found: {custom_config_path}"
+            logger.error(error_msg)
+            raise FileNotFoundError(error_msg)
+        
+        logger.info(f"Loading custom configuration from {custom_config_path}")
+        load_dotenv(custom_config_path, override=True)
+        
+        # Recreate the config object with the new environment variables
+        global config
+        config = TravelPlannerConfig()
+    
+    if validate:
+        is_valid = config.validate(raise_error=raise_on_error)
+        if not is_valid:
+            logger.warning(
+                "Configuration validation failed. The application may not function correctly. "
+                "Please check your environment variables and ensure all required API keys are set."
+            )
+            
+            # Print instructions for setting up environment variables
+            logger.info(
+                "Required environment variables: OPENAI_API_KEY, SUPABASE_URL, SUPABASE_KEY"
+            )
+            logger.info(
+                "Optional environment variables: TAVILY_API_KEY, FIRECRAWL_API_KEY"
+            )
+            logger.info(
+                "You can set these in a .env file in the project root, or as environment variables in your shell."
+            )
+    
     return config
