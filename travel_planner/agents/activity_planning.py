@@ -72,7 +72,7 @@ class Activity:
         if self.currency == "USD":
             return f"${self.price:.2f}"
         elif self.currency == "EUR":
-            return f"¬{self.price:.2f}"
+            return f"â‚¬{self.price:.2f}"
         else:
             return f"{self.price:.2f} {self.currency}"
     
@@ -410,7 +410,7 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
                 id="act5",
                 name="Parisian Food Tour",
                 type=ActivityType.FOOD,
-                location="Saint-Germain-des-Prés, 75006 Paris, France",
+                location="Saint-Germain-des-PrÃ©s, 75006 Paris, France",
                 description="Culinary walking tour featuring tastings at various shops and cafes.",
                 price=95.0,
                 currency="EUR",
@@ -432,9 +432,9 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
             ),
             Activity(
                 id="act6",
-                name="Musée d'Orsay",
+                name="MusÃ©e d'Orsay",
                 type=ActivityType.MUSEUM,
-                location="1 Rue de la Légion d'Honneur, 75007 Paris, France",
+                location="1 Rue de la LÃ©gion d'Honneur, 75007 Paris, France",
                 description="Museum housed in the former Orsay railway station, featuring art from 1848 to 1914.",
                 price=16.0,
                 currency="EUR",
@@ -647,7 +647,7 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
             
             # Add weather note
             if weather:
-                itinerary.notes += f"\nWeather forecast: {weather.get('condition')}, {weather.get('temperature_celsius')}°C ({weather.get('temperature_fahrenheit')}°F)"
+                itinerary.notes += f"\nWeather forecast: {weather.get('condition')}, {weather.get('temperature_celsius')}Â°C ({weather.get('temperature_fahrenheit')}Â°F)"
             
             # Add the itinerary to the dictionary
             itineraries[date_str] = itinerary
@@ -689,7 +689,7 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
             
             if itinerary.weather_forecast:
                 weather = itinerary.weather_forecast
-                day_details.append(f"Weather: {weather.get('condition')}, {weather.get('temperature_celsius')}°C")
+                day_details.append(f"Weather: {weather.get('condition')}, {weather.get('temperature_celsius')}Â°C")
                 
             for i, scheduled in enumerate(itinerary.activities, 1):
                 activity = scheduled.activity

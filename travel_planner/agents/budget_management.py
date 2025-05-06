@@ -48,7 +48,7 @@ class BudgetItem:
         if self.currency == "USD":
             return f"${self.amount:.2f}"
         elif self.currency == "EUR":
-            return f"¬{self.amount:.2f}"
+            return f"â‚¬{self.amount:.2f}"
         else:
             return f"{self.amount:.2f} {self.currency}"
 
@@ -78,7 +78,7 @@ class BudgetAllocation:
         if self.currency == "USD":
             return f"${self.amount:.2f}"
         elif self.currency == "EUR":
-            return f"¬{self.amount:.2f}"
+            return f"â‚¬{self.amount:.2f}"
         else:
             return f"{self.amount:.2f} {self.currency}"
 
@@ -355,7 +355,7 @@ class BudgetManagementAgent(BaseAgent[BudgetContext]):
         user_input = input_data if isinstance(input_data, str) else self._get_latest_user_input(input_data)
         
         # Check if the input likely contains expense information
-        expense_keywords = ["cost", "price", "expense", "spend", "buy", "purchase", "book", "reserve", "paid", "$", "¬", "£"]
+        expense_keywords = ["cost", "price", "expense", "spend", "buy", "purchase", "book", "reserve", "paid", "$", "â‚¬", "Â£"]
         if not any(keyword in user_input.lower() for keyword in expense_keywords):
             return []  # No expense information found
         

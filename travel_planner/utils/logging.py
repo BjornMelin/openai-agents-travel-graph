@@ -19,10 +19,10 @@ from travel_planner.config import LogLevel
 def get_logger(name: str):
     """
     Get a logger instance for the specified module.
-    
+
     Args:
         name: Module name (typically __name__)
-        
+
     Returns:
         Configured logger instance with the module name attached
     """

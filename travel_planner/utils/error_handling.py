@@ -102,7 +102,7 @@ def handle_errors(
     default_value: T | None = None, error_cls: type[Exception] = TravelPlannerError
 ) -> Callable[[F], F]:
     """
-    Decorator to catch and handle exceptions, logging them and 
+    Decorator to catch and handle exceptions, logging them and
     optionally returning a default value.
 
     Args:
@@ -142,7 +142,7 @@ def with_retry(
     retry_exceptions: tuple = (APIError,),
 ) -> Callable[[F], F]:
     """
-    Decorator to retry a function with exponential backoff when specific 
+    Decorator to retry a function with exponential backoff when specific
     exceptions occur.
 
     Args:

@@ -11,7 +11,7 @@ import json
 import os
 import sys
 import traceback
-from datetime import datetime
+from datetime import datetime, date
 
 from travel_planner.agents.accommodation import AccommodationAgent
 from travel_planner.agents.activity_planning import ActivityPlanningAgent
@@ -1046,7 +1046,7 @@ def create_travel_workflow(args: argparse.Namespace) -> TravelWorkflow:
     return workflow
 
 
-def main() -> int:
+async def main() -> int:
     """
     Main entry point function.
 
@@ -1146,7 +1146,7 @@ def main() -> int:
 
         if query_mode:
             # Run in query mode
-            final_state = asyncio.run(run_query_mode(args))
+            final_state = await run_query_mode(args)
 
             # Display the results
             if final_state and final_state.travel_plan:
@@ -1159,7 +1159,7 @@ def main() -> int:
                 return 1
         else:
             # Run in interactive mode
-            asyncio.run(run_interactive_mode(args))
+            await run_interactive_mode(args)
 
         return 0
     except TravelPlannerConfig.ConfigurationError as e:
@@ -1183,4 +1183,4 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    sys.exit(asyncio.run(main()))

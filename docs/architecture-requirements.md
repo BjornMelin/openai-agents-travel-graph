@@ -7,29 +7,34 @@ After extensive research using various MCP server tools, I've determined the opt
 ### Core Components
 
 1. **Primary Agent Framework**: OpenAI Agents SDK (Latest 2025 Release)
+
    - Advanced reasoning capabilities with sequential problem decomposition
    - Comprehensive tool use and integration features
    - Built-in tracking and monitoring
    - Support for handoffs between specialized agents
 
 2. **Orchestration Layer**: LangGraph v0.4+ / LangChain
+
    - Graph-based agent workflow management
    - Support for parallel handoffs (new in 2025)
    - Advanced state management
    - Human-in-the-loop capabilities via interrupts
 
 3. **Browser Automation**: Stagehand v2.0+ (Built on Playwright)
+
    - Hybrid approach combining code and natural language instructions
    - Self-healing automation resistant to UI changes
    - Integration with OpenAI and Anthropic computer use models
    - Action preview and caching for performance and cost optimization
 
 4. **Data Persistence**: Supabase
+
    - Real-time database capabilities
    - Secure storage for user preferences and travel details
    - Scalable architecture
 
 5. **Research Tools**:
+
    - Tavily for intelligent web search
    - Firecrawl for detailed web content extraction
    - Context7 for accessing documentation
@@ -45,89 +50,89 @@ After extensive research using various MCP server tools, I've determined the opt
 flowchart TD
     %% Main system layers
     UI[User Interface Layer] --> IP[Input Processing]
-    
+
     %% Input processing components
     subgraph IP[Input Processing]
-        BA[Budget Analysis] 
+        BA[Budget Analysis]
         PE[Preference Extraction]
         RV[Requirements Validation]
     end
-    
+
     IP --> OL
-    
+
     %% Orchestration layer
     subgraph OL[Orchestration Layer - LangGraph]
         SM[State Management]
         AWM[Agent Workflow Management]
         CP[Context Preservation]
     end
-    
+
     %% Specialized agents
     OL --> DRA[Destination Research Agent]
     OL --> FSA[Flight Search Agent]
-    OL --> ASA[Accommodation Search Agent] 
+    OL --> ASA[Accommodation Search Agent]
     OL --> TPA[Transportation Planning Agent]
     OL --> APA[Activity Planning Agent]
-    
+
     %% Browser automation layer
     DRA & FSA & ASA & TPA & APA --> BAL
-    
+
     subgraph BAL[Browser Automation Layer - Stagehand]
         BIM[Browser Instance Management]
         CBA[Code-Based Automation]
         NLA[Natural Language Automation]
         ACO[Action Caching & Optimization]
     end
-    
+
     %% Website targets
     BAL --> TIS[Travel Information Sites]
     BAL --> FBS[Flight Booking Sites]
     BAL --> HBS[Hotel Booking Sites]
     BAL --> CRS[Car Rental Sites]
     BAL --> LAS[Local Activities Sites]
-    
+
     %% Integration and management layers
     TIS & FBS & HBS & CRS & LAS --> DIL
-    
+
     subgraph DIL[Data Integration Layer]
         TSI[Tavily Search Integration]
         FI[Firecrawl Integration]
         C7I[Context7 Integration]
     end
-    
+
     DIL --> BMA
-    
+
     subgraph BMA[Budget Management Agent]
         CT[Cost Tracking]
         BA2[Budget Allocation]
         OS[Optimization Suggestions]
     end
-    
+
     BMA --> KML
-    
+
     subgraph KML[Knowledge & Memory Layer]
         MCPM[MCP Memory Server Integration]
         EM[Entity Management]
         RT[Relationship Tracking]
     end
-    
+
     KML --> OGL
-    
+
     subgraph OGL[Output Generation Layer]
         IC[Itinerary Creation]
         BD[Budget Breakdown]
         AS[Alternative Suggestions]
     end
-    
+
     OGL --> PS[Persistent Storage - Supabase]
-    
+
     %% Styling
     classDef systemLayer fill:#f9f9f9,stroke:#333,stroke-width:2px
     classDef component fill:#e1f5fe,stroke:#01579b,stroke-width:1px
     classDef agent fill:#e8f5e9,stroke:#2e7d32,stroke-width:1px
     classDef external fill:#fff3e0,stroke:#e65100,stroke-width:1px
     classDef storage fill:#f3e5f5,stroke:#6a1b9a,stroke-width:1px
-    
+
     class UI,IP,OL,BAL,DIL,KML,OGL,PS systemLayer
     class BA,PE,RV,SM,AWM,CP,BIM,CBA,NLA,ACO,TSI,FI,C7I,CT,BA2,OS,MCPM,EM,RT,IC,BD,AS component
     class DRA,FSA,ASA,TPA,APA,BMA agent
@@ -155,7 +160,7 @@ graph TD
     classDef process fill:#d1f0ee,stroke:#009688,stroke-width:1px
     classDef decision fill:#ffe0b2,stroke:#ff9800,stroke-width:1px
     classDef data fill:#e3f2fd,stroke:#2196f3,stroke-width:1px
-    
+
     class A,H data
     class B,D,F,G,E process
     class C decision
@@ -188,7 +193,7 @@ graph TD
     classDef process fill:#d1f0ee,stroke:#009688,stroke-width:1px
     classDef decision fill:#ffe0b2,stroke:#ff9800,stroke-width:1px
     classDef data fill:#e3f2fd,stroke:#2196f3,stroke-width:1px
-    
+
     class A,J data
     class B,C,D,E,G,H process
     class F,I decision
@@ -324,7 +329,7 @@ graph TD
     classDef security fill:#ffebee,stroke:#f44336,stroke-width:1px
     classDef process fill:#d1f0ee,stroke:#009688,stroke-width:1px
     classDef data fill:#e3f2fd,stroke:#2196f3,stroke-width:1px
-    
+
     class A,J,L,N data
     class B,D,G,K,M,O process
     class C,E,F,H,I security
@@ -341,27 +346,27 @@ graph TD
 
 ```mermaid
 flowchart TD
-    subgraph "System Integration" 
+    subgraph "System Integration"
         A[OpenAI Agents SDK] <--> B[LangGraph]
         B <--> C[Stagehand]
         C <--> D[Supabase]
-        
+
         E[MCP Memory Server] <--> A
         E <--> B
-        
+
         F[External Research Tools] <--> A
         F <--> C
-        
+
         G[Tavily API] --> F
         H[Firecrawl] --> F
         I[Context7] --> F
     end
-    
+
     classDef core fill:#bbdefb,stroke:#1976d2,stroke-width:2px
     classDef memory fill:#e1bee7,stroke:#7b1fa2,stroke-width:1px
     classDef external fill:#ffcc80,stroke:#ef6c00,stroke-width:1px
     classDef tools fill:#c8e6c9,stroke:#388e3c,stroke-width:1px
-    
+
     class A,B,C,D core
     class E memory
     class F external
@@ -387,37 +392,37 @@ sequenceDiagram
     participant Transport as Transportation Agent
     participant Activity as Activity Planning Agent
     participant Budget as Budget Management Agent
-    
+
     User->>Orchestrator: Travel Request
-    
+
     Orchestrator->>Destination: Research Request
     Destination-->>Orchestrator: Destination Options
-    
+
     Orchestrator->>User: Destination Confirmation
     User->>Orchestrator: Selected Destination
-    
+
     par Flight & Hotel Search
         Orchestrator->>Flight: Search Flights
         Flight-->>Orchestrator: Flight Options
-        
+
         Orchestrator->>Hotel: Search Accommodations
         Hotel-->>Orchestrator: Accommodation Options
     end
-    
+
     Orchestrator->>User: Flight & Hotel Options
     User->>Orchestrator: Selected Flight & Hotel
-    
+
     Orchestrator->>Transport: Plan Local Transportation
     Transport-->>Orchestrator: Transportation Plan
-    
+
     Orchestrator->>Activity: Plan Activities
     Activity-->>Orchestrator: Activity Schedule
-    
+
     Orchestrator->>Budget: Generate Budget Breakdown
     Budget-->>Orchestrator: Complete Budget
-    
+
     Orchestrator->>User: Complete Itinerary
-    
+
     Note over User,Budget: Human feedback loop can interrupt at any stage
 ```
 

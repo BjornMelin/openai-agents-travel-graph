@@ -159,10 +159,10 @@ def get_currency_symbol(currency_code: str) -> str:
     """
     currency_symbols = {
         "USD": "$",
-        "EUR": "�",
-        "GBP": "�",
-        "JPY": "�",
-        "CNY": "�",
+        "EUR": "€",
+        "GBP": "£",
+        "JPY": "¥",
+        "CNY": "¥",
         "AUD": "A$",
         "CAD": "C$",
         "CHF": "Fr",
