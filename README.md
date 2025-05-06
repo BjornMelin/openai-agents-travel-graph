@@ -160,11 +160,50 @@ uv pip install -r requirements.txt
 # Set up environment variables
 cp .env.example .env
 # Edit .env with your API keys and configuration
+
+# Set up Supabase database
+python supabase_setup.py init
 ```
+
+### Supabase Setup
+
+This project uses Supabase for data persistence. You need to set up a Supabase project and configure it with the database schema. The `supabase_setup.py` script automates this process:
+
+```bash
+# Initialize the database with required tables and indexes
+python supabase_setup.py init
+
+# Check the status of your Supabase database
+python supabase_setup.py status
+
+# Reset the database (WARNING: This will delete all data)
+python supabase_setup.py reset
+
+# Create test data for development
+python supabase_setup.py init --test-data
+```
+
+For more information about the database schema, see [Migrations README](travel_planner/data/migrations/README.md).
 
 ## Usage
 
-Coming soon! The project is under active development.
+Run the travel planner in interactive mode:
+
+```bash
+python -m travel_planner.main
+```
+
+Or provide a query directly:
+
+```bash
+python -m travel_planner.main --query "I want to visit Tokyo for a week in October" --origin "New York" --budget "3000-5000"
+```
+
+For more options:
+
+```bash
+python -m travel_planner.main --help
+```
 
 ## Development
 

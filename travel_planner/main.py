@@ -22,6 +22,7 @@ from travel_planner.agents.research_tools import DestinationResearchTools
 from travel_planner.agents.transportation import TransportationAgent
 from travel_planner.config import initialize_config, TravelPlannerConfig
 from travel_planner.data.models import TravelPlan, TravelQuery
+from travel_planner.data.setup import initialize_database
 from travel_planner.data.supabase import SupabaseClient
 from travel_planner.orchestration.state_graph import TravelPlanningState
 from travel_planner.orchestration.workflow import TravelWorkflow
@@ -70,6 +71,11 @@ def setup_argparse() -> argparse.ArgumentParser:
         "--no-cache",
         action="store_true",
         help="Disable caching for browser automation and API calls",
+    )
+    system_group.add_argument(
+        "--init-db",
+        action="store_true",
+        help="Initialize Supabase database tables if they don't exist",
     )
 
     # Query mode arguments
@@ -1007,6 +1013,23 @@ def main() -> int:
             print("\nYou can set these in a .env file in the project root directory.")
             print("See the README.md for setup instructions.\n")
             return 1
+            
+        # Initialize database if requested
+        if args.init_db:
+            logger.info("Initializing Supabase database...")
+            try:
+                # Initialize database tables
+                db_success = await initialize_database(system_config)
+                if not db_success:
+                    logger.error("Failed to initialize Supabase database")
+                    print("\nERROR: Failed to initialize Supabase database.")
+                    print("Please check logs for details or run 'python supabase_setup.py init' for more information.\n")
+                    return 1
+                logger.info("Supabase database initialized successfully")
+            except Exception as e:
+                logger.error(f"Error initializing Supabase database: {e}")
+                print(f"\nERROR: Failed to initialize Supabase database: {e}")
+                return 1
 
         # Determine if we should run in query mode (any query-related argument provided)
         query_mode = any(
