@@ -445,48 +445,16 @@ class AccommodationSearchAutomation(BrowserAutomation):
         accommodations = []
         
         # Extract the accommodation data from the extraction result
-        accommodation_data = extraction_result.get("accommodations", [])
-        if not accommodation_data and isinstance(extraction_result, list):
-            accommodation_data = extraction_result
+        accommodation_data = self._extract_accommodation_data(extraction_result)
             
         for data in accommodation_data[:5]:  # Limit to top 5 results
             try:
-                # Determine accommodation type
-                accom_type_str = data.get("type", "").lower()
-                accom_type = AccommodationType.HOTEL  # Default
+                # Map accommodation type string to enum
+                accom_type = self._determine_accommodation_type(data.get("type", "").lower())
                 
-                # Map the extracted type to our enum
-                if "hotel" in accom_type_str:
-                    accom_type = AccommodationType.HOTEL
-                elif "apartment" in accom_type_str:
-                    accom_type = AccommodationType.APARTMENT
-                elif "hostel" in accom_type_str:
-                    accom_type = AccommodationType.HOSTEL
-                elif "resort" in accom_type_str:
-                    accom_type = AccommodationType.RESORT
-                elif "villa" in accom_type_str:
-                    accom_type = AccommodationType.VILLA
-                elif "airbnb" in accom_type_str:
-                    accom_type = AccommodationType.AIRBNB
-                elif "boutique" in accom_type_str:
-                    accom_type = AccommodationType.BOUTIQUE
-                elif "guesthouse" in accom_type_str:
-                    accom_type = AccommodationType.GUESTHOUSE
-                
-                # Parse price
-                price_per_night = data.get("price_per_night", 0)
-                if isinstance(price_per_night, str):
-                    # Remove currency symbols and commas, then convert to float
-                    price_per_night = price_per_night.replace(',', '')
-                    price_per_night = ''.join(c for c in price_per_night if c.isdigit() or c == '.')
-                    price_per_night = float(price_per_night) if price_per_night else 0
-                    
-                total_price = data.get("total_price", 0)
-                if isinstance(total_price, str):
-                    # Remove currency symbols and commas, then convert to float
-                    total_price = total_price.replace(',', '')
-                    total_price = ''.join(c for c in total_price if c.isdigit() or c == '.')
-                    total_price = float(total_price) if total_price else 0
+                # Parse prices
+                price_per_night = self._parse_price(data.get("price_per_night", 0))
+                total_price = self._parse_price(data.get("total_price", 0))
                 
                 # Create the Accommodation object
                 accommodation = Accommodation(
@@ -513,6 +481,45 @@ class AccommodationSearchAutomation(BrowserAutomation):
                 # Continue with other accommodations even if one fails
                 
         return accommodations
+        
+    def _extract_accommodation_data(self, extraction_result: dict[str, Any]) -> list[dict[str, Any]]:
+        """Extract accommodation data from extraction result."""
+        accommodation_data = extraction_result.get("accommodations", [])
+        if not accommodation_data and isinstance(extraction_result, list):
+            accommodation_data = extraction_result
+        return accommodation_data
+    
+    def _determine_accommodation_type(self, accom_type_str: str) -> AccommodationType:
+        """Map accommodation type string to enum value."""
+        # Define mapping from keywords to accommodation types
+        type_mapping = {
+            "hotel": AccommodationType.HOTEL,
+            "apartment": AccommodationType.APARTMENT,
+            "hostel": AccommodationType.HOSTEL,
+            "resort": AccommodationType.RESORT,
+            "villa": AccommodationType.VILLA,
+            "airbnb": AccommodationType.AIRBNB,
+            "boutique": AccommodationType.BOUTIQUE,
+            "guesthouse": AccommodationType.GUESTHOUSE
+        }
+        
+        # Check for keywords in the type string
+        for keyword, accom_type in type_mapping.items():
+            if keyword in accom_type_str:
+                return accom_type
+                
+        # Default to hotel if no match
+        return AccommodationType.HOTEL
+    
+    def _parse_price(self, price_value: Any) -> float:
+        """Parse price value to float."""
+        if not isinstance(price_value, str):
+            return float(price_value) if price_value else 0
+            
+        # Remove currency symbols and commas, then convert to float
+        price_str = price_value.replace(',', '')
+        price_str = ''.join(c for c in price_str if c.isdigit() or c == '.')
+        return float(price_str) if price_str else 0
     
     @staticmethod
     def format_date_for_provider(date_obj: date, provider: str) -> str:

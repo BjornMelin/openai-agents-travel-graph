@@ -470,11 +470,47 @@ class BudgetManagementAgent(BaseAgent[BudgetContext]):
         """
         recommendations = []
         
-        # Check for overspent categories
+        # Find overspent and surplus categories
+        overspent_categories = self._find_overspent_categories(context)
+        surplus_categories = self._find_surplus_categories(context)
+        
+        # Generate alternative expense recommendations
+        alternative_recommendations = self._generate_alternative_recommendations(
+            context, overspent_categories
+        )
+        recommendations.extend(alternative_recommendations)
+        
+        # Generate reallocation recommendations
+        reallocation_recommendations = self._generate_reallocation_recommendations(
+            context, overspent_categories, surplus_categories
+        )
+        recommendations.extend(reallocation_recommendations)
+        
+        return recommendations
+    
+    def _find_overspent_categories(self, context: BudgetContext) -> list[ExpenseCategory]:
+        """Find categories where spending exceeds allocation."""
         overspent_categories = []
         for category, allocation in context.allocations.items():
             if allocation.total_spent > allocation.amount:
                 overspent_categories.append(category)
+        return overspent_categories
+    
+    def _find_surplus_categories(self, context: BudgetContext) -> list[ExpenseCategory]:
+        """Find categories with significant unused budget."""
+        surplus_categories = []
+        for category, allocation in context.allocations.items():
+            # If more than 30% of the allocation is unspent and it's a lower priority category
+            if (allocation.remaining > (allocation.amount * 0.3) and 
+                context.category_preferences.get(category, 0) <= 1):
+                surplus_categories.append(category)
+        return surplus_categories
+    
+    def _generate_alternative_recommendations(
+        self, context: BudgetContext, overspent_categories: list[ExpenseCategory]
+    ) -> list[BudgetRecommendation]:
+        """Generate recommendations to use cheaper alternatives."""
+        recommendations = []
         
         # Generate recommendations for overspent categories
         for category in overspent_categories:
@@ -482,73 +518,96 @@ class BudgetManagementAgent(BaseAgent[BudgetContext]):
             
             # Look at expenses in this category
             for expense in allocation.items:
-                # Check if the expense has alternatives
-                if expense.alternatives:
-                    # Recommend the cheapest alternative
-                    cheapest_alt = min(expense.alternatives, key=lambda x: x["amount"])
-                    saving = expense.amount - cheapest_alt["amount"]
+                if not expense.alternatives:
+                    continue
                     
-                    if saving > 0:
-                        recommendations.append(BudgetRecommendation(
-                            expense_name=expense.name,
-                            category=expense.category,
-                            current_amount=expense.amount,
-                            recommended_amount=cheapest_alt["amount"],
-                            currency=expense.currency,
-                            saving=saving,
-                            reasons=[
-                                f"This helps reduce overspending in {category.value}",
-                                f"Alternative option: {cheapest_alt['name']}",
-                                cheapest_alt.get("note", "")
-                            ],
-                            alternatives=[cheapest_alt]
-                        ))
+                # Recommend the cheapest alternative
+                cheapest_alt = min(expense.alternatives, key=lambda x: x["amount"])
+                saving = expense.amount - cheapest_alt["amount"]
+                
+                if saving <= 0:
+                    continue
+                    
+                recommendations.append(BudgetRecommendation(
+                    expense_name=expense.name,
+                    category=expense.category,
+                    current_amount=expense.amount,
+                    recommended_amount=cheapest_alt["amount"],
+                    currency=expense.currency,
+                    saving=saving,
+                    reasons=[
+                        f"This helps reduce overspending in {category.value}",
+                        f"Alternative option: {cheapest_alt['name']}",
+                        cheapest_alt.get("note", "")
+                    ],
+                    alternatives=[cheapest_alt]
+                ))
         
-        # Check for categories with a lot of remaining budget
-        surplus_categories = []
-        for category, allocation in context.allocations.items():
-            # If more than 30% of the allocation is unspent and it's a lower priority category
-            if allocation.remaining > (allocation.amount * 0.3) and context.category_preferences.get(category, 0) <= 1:
-                surplus_categories.append(category)
+        return recommendations
+    
+    def _generate_reallocation_recommendations(
+        self, 
+        context: BudgetContext, 
+        overspent_categories: list[ExpenseCategory],
+        surplus_categories: list[ExpenseCategory]
+    ) -> list[BudgetRecommendation]:
+        """Generate recommendations to reallocate budget between categories."""
+        recommendations = []
         
-        # Generate reallocation recommendations
         for surplus_category in surplus_categories:
             surplus_allocation = context.allocations[surplus_category]
             
             # Find highest priority overspent category to reallocate to
-            target_category = None
-            highest_priority = -1
+            target_category = self._find_highest_priority_target(
+                context, overspent_categories
+            )
             
-            for category in overspent_categories:
-                priority = context.category_preferences.get(category, 0)
-                if priority > highest_priority:
-                    highest_priority = priority
-                    target_category = category
+            if not target_category:
+                continue
+                
+            target_allocation = context.allocations[target_category]
             
-            if target_category:
-                target_allocation = context.allocations[target_category]
+            # Recommend reallocation of up to 50% of the surplus
+            reallocation_amount = min(
+                surplus_allocation.remaining * 0.5, 
+                target_allocation.total_spent - target_allocation.amount
+            )
+            
+            if reallocation_amount <= 0:
+                continue
                 
-                # Recommend reallocation of up to 50% of the surplus
-                reallocation_amount = min(surplus_allocation.remaining * 0.5, target_allocation.total_spent - target_allocation.amount)
-                
-                if reallocation_amount > 0:
-                    # Create a virtual expense for the recommendation
-                    recommendations.append(BudgetRecommendation(
-                        expense_name=f"Reallocate from {surplus_category.value} to {target_category.value}",
-                        category=surplus_category,
-                        current_amount=surplus_allocation.amount,
-                        recommended_amount=surplus_allocation.amount - reallocation_amount,
-                        currency=context.currency,
-                        saving=0,  # Not a direct saving, but a reallocation
-                        reasons=[
-                            f"Surplus budget in {surplus_category.value}",
-                            f"Overspending in higher priority {target_category.value}",
-                            f"Reallocate {reallocation_amount:.2f} {context.currency}"
-                        ],
-                        alternatives=[]
-                    ))
+            # Create a virtual expense for the recommendation
+            recommendations.append(BudgetRecommendation(
+                expense_name=f"Reallocate from {surplus_category.value} to {target_category.value}",
+                category=surplus_category,
+                current_amount=surplus_allocation.amount,
+                recommended_amount=surplus_allocation.amount - reallocation_amount,
+                currency=context.currency,
+                saving=0,  # Not a direct saving, but a reallocation
+                reasons=[
+                    f"Surplus budget in {surplus_category.value}",
+                    f"Overspending in higher priority {target_category.value}",
+                    f"Reallocate {reallocation_amount:.2f} {context.currency}"
+                ],
+                alternatives=[]
+            ))
         
         return recommendations
+    
+    def _find_highest_priority_target(
+        self, context: BudgetContext, overspent_categories: list[ExpenseCategory]
+    ) -> ExpenseCategory | None:
+        """Find the highest priority overspent category."""
+        target_category = None
+        highest_priority = -1
+        
+        for category in overspent_categories:
+            priority = context.category_preferences.get(category, 0)
+            if priority > highest_priority:
+                highest_priority = priority
+                target_category = category
+        
+        return target_category
     
     async def _check_budget_alerts(self, context: BudgetContext) -> None:
         """
