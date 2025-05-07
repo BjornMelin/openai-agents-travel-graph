@@ -2,7 +2,8 @@
 Main entry point for the Travel Planner application.
 
 This module serves as the application's entry point, initializing the necessary
-components and providing a CLI interface for interacting with the travel planning system.
+components and providing a CLI interface for interacting with the travel planning
+system.
 """
 
 import argparse
@@ -11,7 +12,7 @@ import json
 import os
 import sys
 import traceback
-from datetime import datetime, date
+from datetime import date, datetime
 
 from travel_planner.agents.accommodation import AccommodationAgent
 from travel_planner.agents.activity_planning import ActivityPlanningAgent
@@ -41,7 +42,7 @@ def setup_argparse() -> argparse.ArgumentParser:
         Configured argument parser
     """
     parser = argparse.ArgumentParser(
-        description="AI Travel Planning System powered by OpenAI Agents SDK and LangGraph"
+        description="AI Travel Planning System powered by OpenAI Agents SDK"
     )
 
     # System configuration arguments
@@ -224,7 +225,8 @@ async def run_interactive_mode(args: argparse.Namespace) -> None:
                 print(f"\nTravel Planner: I encountered an issue: {state.error}")
             else:
                 print(
-                    "\nTravel Planner: I couldn't complete your travel planning request."
+                    "\nTravel Planner: I couldn't complete your travel planning"
+                    " request."
                 )
 
         except Exception as e:
@@ -262,10 +264,12 @@ def display_travel_plan(plan: TravelPlan) -> None:
         print("Flights:")
         for i, flight in enumerate(plan.flights):
             print(
-                f"  {i+1}. {flight.airline}: {flight.departure_location} to {flight.arrival_location}"
+                f"  {i+1}. {flight.airline}: {flight.departure_location} to "
+                f"{flight.arrival_location}"
             )
             print(
-                f"     {flight.departure_time.strftime('%Y-%m-%d %H:%M')} - {flight.arrival_time.strftime('%Y-%m-%d %H:%M')}"
+                f"     {flight.departure_time.strftime('%Y-%m-%d %H:%M')} - "
+                f"{flight.arrival_time.strftime('%Y-%m-%d %H:%M')}"
             )
             print(f"     Price: ${flight.price:.2f}")
         print()
@@ -276,10 +280,12 @@ def display_travel_plan(plan: TravelPlan) -> None:
         for i, acc in enumerate(plan.accommodations):
             print(f"  {i+1}. {acc.name} ({acc.type})")
             print(
-                f"     {acc.check_in_date.strftime('%Y-%m-%d')} to {acc.check_out_date.strftime('%Y-%m-%d')}"
+                f"     {acc.check_in_date.strftime('%Y-%m-%d')} to "
+                f"{acc.check_out_date.strftime('%Y-%m-%d')}"
             )
             print(
-                f"     Price: ${acc.price_per_night:.2f} per night (Total: ${acc.total_price:.2f})"
+                f"     Price: ${acc.price_per_night:.2f} per night "
+                f"(Total: ${acc.total_price:.2f})"
             )
         print()
 
@@ -290,7 +296,9 @@ def display_travel_plan(plan: TravelPlan) -> None:
             print(f"  Day {i+1} ({day.date.strftime('%Y-%m-%d')}):")
             for j, activity in enumerate(day.activities):
                 print(
-                    f"     {j+1}. {activity.name} ({activity.time_start.strftime('%H:%M')} - {activity.time_end.strftime('%H:%M')})"
+                    f"     {j+1}. {activity.name} "
+                    f"({activity.time_start.strftime('%H:%M')} - "
+                    f"{activity.time_end.strftime('%H:%M')})"
                 )
                 print(f"        {activity.description}")
                 if activity.price > 0:
@@ -359,13 +367,16 @@ async def save_travel_plan(
                 for i, flight in enumerate(plan.flights):
                     f.write(f"{i+1}. {flight.airline}: {flight.flight_number}\n")
                     f.write(
-                        f"   From: {flight.departure_airport} - To: {flight.arrival_airport}\n"
+                        f"   From: {flight.departure_airport} - "
+                        f"To: {flight.arrival_airport}\n"
                     )
                     f.write(
-                        f"   Departure: {flight.departure_time.strftime('%Y-%m-%d %H:%M')}\n"
+                        f"   Departure: "
+                        f"{flight.departure_time.strftime('%Y-%m-%d %H:%M')}\n"
                     )
                     f.write(
-                        f"   Arrival: {flight.arrival_time.strftime('%Y-%m-%d %H:%M')}\n"
+                        f"   Arrival: "
+                        f"{flight.arrival_time.strftime('%Y-%m-%d %H:%M')}\n"
                     )
                     f.write(f"   Class: {flight.travel_class.value}\n")
                     f.write(f"   Price: {flight.currency} {flight.price:.2f}\n")
@@ -373,7 +384,8 @@ async def save_travel_plan(
                         f.write(f"   Layovers: {len(flight.layovers)}\n")
                         for j, layover in enumerate(flight.layovers):
                             f.write(
-                                f"      {j+1}. {layover.get('airport', 'Unknown')} - Duration: {layover.get('duration_minutes', 0)} min\n"
+                                f"      {j+1}. {layover.get('airport', 'Unknown')} - "
+                                f"Duration: {layover.get('duration_minutes', 0)} min\n"
                             )
                     f.write(f"   Duration: {flight.duration_minutes} minutes\n")
                     if flight.booking_link:
@@ -390,10 +402,12 @@ async def save_travel_plan(
                     if acc.rating:
                         f.write(f"   Rating: {acc.rating}/5\n")
                     f.write(
-                        f"   Check-in: {acc.check_in_time} - Check-out: {acc.check_out_time}\n"
+                        f"   Check-in: {acc.check_in_time} - "
+                        f"Check-out: {acc.check_out_time}\n"
                     )
                     f.write(
-                        f"   Price per night: {acc.currency} {acc.price_per_night:.2f}\n"
+                        f"   Price per night: {acc.currency} "
+                        f"{acc.price_per_night:.2f}\n"
                     )
                     f.write(f"   Total price: {acc.currency} {acc.total_price:.2f}\n")
                     if acc.amenities and len(acc.amenities) > 0:
@@ -411,7 +425,8 @@ async def save_travel_plan(
                     if day.weather_forecast:
                         weather = day.weather_forecast
                         f.write(
-                            f"   Weather: {weather.get('description', 'N/A')}, {weather.get('temperature', 'N/A')}°C\n"
+                            f"   Weather: {weather.get('description', 'N/A')}, "
+                            f"{weather.get('temperature', 'N/A')}°C\n"
                         )
 
                     for i, activity in enumerate(day.activities):
@@ -444,11 +459,13 @@ async def save_travel_plan(
                         f.write("   Transportation:\n")
                         for i, transport in enumerate(day.transportation):
                             f.write(
-                                f"      {i+1}. {transport.type.value}: {transport.description}\n"
+                                f"      {i+1}. {transport.type.value}: "
+                                f"{transport.description}\n"
                             )
                             if transport.cost:
                                 f.write(
-                                    f"         Cost: {transport.currency} {transport.cost:.2f}\n"
+                                    f"         Cost: {transport.currency} "
+                                f"{transport.cost:.2f}\n"
                                 )
 
                     # Notes for the day
@@ -462,7 +479,8 @@ async def save_travel_plan(
                 f.write("BUDGET SUMMARY\n")
                 f.write("-" * 14 + "\n")
                 f.write(
-                    f"Total budget: {plan.budget.currency} {plan.budget.total_budget:.2f}\n"
+                    f"Total budget: {plan.budget.currency} "
+                    f"{plan.budget.total_budget:.2f}\n"
                 )
                 f.write(f"Spent: {plan.budget.currency} {plan.budget.spent:.2f}\n")
                 f.write(
@@ -550,7 +568,8 @@ async def save_travel_plan(
             padding-bottom: 15px;
             border-bottom: 1px dashed #ddd;
         }}
-        .flight:last-child, .accommodation:last-child, .activity:last-child, .transportation:last-child {{
+        .flight:last-child, .accommodation:last-child, 
+        .activity:last-child, .transportation:last-child {{
             border-bottom: none;
         }}
         .day {{
@@ -625,10 +644,13 @@ async def save_travel_plan(
         <h3>{flight.airline} - Flight {flight.flight_number}</h3>
         <p><strong>From:</strong> {flight.departure_airport} &rarr;
            <strong>To:</strong> {flight.arrival_airport}</p>
-        <p><strong>Departure:</strong> {flight.departure_time.strftime('%Y-%m-%d %H:%M')}</p>
-        <p><strong>Arrival:</strong> {flight.arrival_time.strftime('%Y-%m-%d %H:%M')}</p>
+        <p><strong>Departure:</strong> 
+           {flight.departure_time.strftime('%Y-%m-%d %H:%M')}</p>
+        <p><strong>Arrival:</strong> 
+           {flight.arrival_time.strftime('%Y-%m-%d %H:%M')}</p>
         <p><strong>Class:</strong> {flight.travel_class.value}</p>
-        <p><strong>Duration:</strong> {flight.duration_minutes // 60}h {flight.duration_minutes % 60}m</p>
+        <p><strong>Duration:</strong> 
+           {flight.duration_minutes // 60}h {flight.duration_minutes % 60}m</p>
 """
                 if flight.layovers and len(flight.layovers) > 0:
                     html_content += f"""
@@ -637,13 +659,15 @@ async def save_travel_plan(
 """
                     for layover in flight.layovers:
                         html_content += f"""
-            <li>{layover.get('airport', 'Unknown')} - Duration: {layover.get('duration_minutes', 0)} minutes</li>
+            <li>{layover.get('airport', 'Unknown')} - Duration: 
+               {layover.get('duration_minutes', 0)} minutes</li>
 """
                     html_content += """
         </ul>
 """
                 html_content += f"""
-        <p class="price"><strong>Price:</strong> {flight.currency} {flight.price:.2f}</p>
+        <p class="price"><strong>Price:</strong> 
+           {flight.currency} {flight.price:.2f}</p>
 """
                 if flight.booking_link:
                     html_content += f"""
@@ -669,9 +693,14 @@ async def save_travel_plan(
         <p><strong>Rating:</strong> {acc.rating}/5</p>
 """
                 html_content += f"""
-        <p><strong>Check-in:</strong> {acc.check_in_time} - <strong>Check-out:</strong> {acc.check_out_time}</p>
-        <p class="price"><strong>Price per night:</strong> {acc.currency} {acc.price_per_night:.2f}</p>
-        <p class="price"><strong>Total price:</strong> {acc.currency} {acc.total_price:.2f}</p>
+        <p><strong>Check-in:</strong> {acc.check_in_time} - 
+           <strong>Check-out:</strong> {acc.check_out_time}</p>
+        <p class="price">
+            <strong>Price per night:</strong> {acc.currency} {acc.price_per_night:.2f}
+        </p>
+        <p class="price">
+            <strong>Total price:</strong> {acc.currency} {acc.total_price:.2f}
+        </p>
 """
                 if acc.amenities and len(acc.amenities) > 0:
                     html_content += f"""
@@ -702,7 +731,8 @@ async def save_travel_plan(
                 if day.weather_forecast:
                     weather = day.weather_forecast
                     html_content += f"""
-            <p><strong>Weather:</strong> {weather.get('description', 'N/A')}, {weather.get('temperature', 'N/A')}°C</p>
+            <p><strong>Weather:</strong> {weather.get('description', 'N/A')},
+               {weather.get('temperature', 'N/A')}°C</p>
 """
                 html_content += """
         </div>
@@ -730,7 +760,9 @@ async def save_travel_plan(
 """
                         if activity.cost:
                             html_content += f"""
-            <p class="price"><strong>Cost:</strong> {activity.currency} {activity.cost:.2f}</p>
+            <p class="price">
+                <strong>Cost:</strong> {activity.currency} {activity.cost:.2f}
+            </p>
 """
                         if activity.booking_required:
                             html_content += """
@@ -757,7 +789,9 @@ async def save_travel_plan(
 """
                         if transport.cost:
                             html_content += f"""
-            <p class="price"><strong>Cost:</strong> {transport.currency} {transport.cost:.2f}</p>
+            <p class="price">
+                <strong>Cost:</strong> {transport.currency} {transport.cost:.2f}
+            </p>
 """
                         if transport.duration_minutes:
                             dur_hours = transport.duration_minutes // 60
@@ -794,9 +828,12 @@ async def save_travel_plan(
     <div class="card">
 """
             html_content += f"""
-        <p><strong>Total Budget:</strong> {plan.budget.currency} {plan.budget.total_budget:.2f}</p>
-        <p><strong>Spent:</strong> {plan.budget.currency} {plan.budget.spent:.2f}</p>
-        <p><strong>Remaining:</strong> {plan.budget.currency} {plan.budget.remaining:.2f}</p>
+        <p><strong>Total Budget:</strong> {plan.budget.currency} 
+           {plan.budget.total_budget:.2f}</p>
+        <p><strong>Spent:</strong> {plan.budget.currency} 
+           {plan.budget.spent:.2f}</p>
+        <p><strong>Remaining:</strong> {plan.budget.currency} 
+           {plan.budget.remaining:.2f}</p>
 """
 
             # Budget breakdown
@@ -946,7 +983,8 @@ def build_travel_query_from_args(args: argparse.Namespace) -> TravelQuery:
             query_params["departure_date"] = date.fromisoformat(args.departure_date)
         except ValueError:
             logger.warning(
-                f"Invalid departure date format: {args.departure_date}. Expected YYYY-MM-DD."
+                f"Invalid departure date format: {args.departure_date}. "
+                f"Expected YYYY-MM-DD."
             )
     if args.return_date:
         try:
@@ -964,7 +1002,8 @@ def build_travel_query_from_args(args: argparse.Namespace) -> TravelQuery:
             query_params["budget_range"] = {"min": min_val, "max": max_val}
         except ValueError:
             logger.warning(
-                f"Invalid budget format: {args.budget}. Expected format like '1000-2000'."
+                f"Invalid budget format: {args.budget}. "
+                f"Expected format like '1000-2000'."
             )
 
     # Load preferences from file if provided
@@ -999,7 +1038,8 @@ async def save_to_database(travel_plan: TravelPlan) -> None:
         )
 
         logger.info(
-            f"Travel plan saved to database with ID: {result.data[0]['id'] if result.data else 'unknown'}"
+            f"Travel plan saved to database with ID: "
+            f"{result.data[0]['id'] if result.data else 'unknown'}"
         )
     except Exception as e:
         logger.error(f"Error saving to database: {e!s}")
@@ -1091,7 +1131,8 @@ async def main() -> int:
                         rate_limit_config = json.load(f)
                         update_rate_limits_from_config(rate_limit_config)
                         logger.info(
-                            f"Loaded custom rate limit configuration from {args.rate_limit_config}"
+                            f"Loaded custom rate limit configuration from "
+                            f"{args.rate_limit_config}"
                         )
                 except Exception as e:
                     logger.error(f"Error loading rate limit configuration: {e}")
@@ -1122,7 +1163,8 @@ async def main() -> int:
                     logger.error("Failed to initialize Supabase database")
                     print("\nERROR: Failed to initialize Supabase database.")
                     print(
-                        "Please check logs for details or run 'python supabase_setup.py init' for more information.\n"
+                        "Please check logs for details or run "
+                        "'python supabase_setup.py init' for more information.\n"
                     )
                     return 1
                 logger.info("Supabase database initialized successfully")

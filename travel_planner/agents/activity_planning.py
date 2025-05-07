@@ -8,9 +8,7 @@ scheduling, and recommending activities and attractions for the travel itinerary
 from dataclasses import dataclass, field
 from datetime import datetime, time, timedelta
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
-
-from pydantic import BaseModel
+from typing import Any
 
 from travel_planner.agents.base import AgentConfig, AgentContext, BaseAgent
 from travel_planner.utils.error_handling import with_retry
@@ -55,16 +53,16 @@ class Activity:
     price: float
     currency: str
     duration_minutes: int
-    opening_hours: Dict[str, Dict[str, time]] = field(default_factory=dict)
+    opening_hours: dict[str, dict[str, time]] = field(default_factory=dict)
     booking_required: bool = False
     booking_url: str = ""
     weather_dependent: bool = False
-    suitable_weather: List[WeatherCondition] = field(default_factory=list)
-    rating: Optional[float] = None
+    suitable_weather: list[WeatherCondition] = field(default_factory=list)
+    rating: float | None = None
     reviews_count: int = 0
-    images: List[str] = field(default_factory=list)
-    tags: List[str] = field(default_factory=list)
-    accessibility_features: List[str] = field(default_factory=list)
+    images: list[str] = field(default_factory=list)
+    tags: list[str] = field(default_factory=list)
+    accessibility_features: list[str] = field(default_factory=list)
     
     @property
     def formatted_price(self) -> str:
@@ -100,8 +98,8 @@ class ScheduledActivity:
 class DailyItinerary:
     """Itinerary for a single day."""
     date: str
-    activities: List[ScheduledActivity] = field(default_factory=list)
-    weather_forecast: Optional[Dict[str, Any]] = None
+    activities: list[ScheduledActivity] = field(default_factory=list)
+    weather_forecast: dict[str, Any] | None = None
     notes: str = ""
     total_cost: float = 0.0
     currency: str = "EUR"
@@ -111,19 +109,19 @@ class DailyItinerary:
 class ActivityPlanningContext(AgentContext):
     """Context for the activity planning agent."""
     destination: str = ""
-    start_date: Optional[str] = None
-    end_date: Optional[str] = None
+    start_date: str | None = None
+    end_date: str | None = None
     traveler_count: int = 1
-    interests: List[str] = field(default_factory=list)
+    interests: list[str] = field(default_factory=list)
     has_children: bool = False
     has_accessibility_needs: bool = False
-    budget_per_day: Optional[float] = None
+    budget_per_day: float | None = None
     accommodation_location: str = ""
-    available_activities: List[Activity] = field(default_factory=list)
-    daily_itineraries: Dict[str, DailyItinerary] = field(default_factory=dict)
-    weather_forecasts: Dict[str, Dict[str, Any]] = field(default_factory=dict)
-    search_params: Dict[str, Any] = field(default_factory=dict)
-    excluded_activity_types: List[ActivityType] = field(default_factory=list)
+    available_activities: list[Activity] = field(default_factory=list)
+    daily_itineraries: dict[str, DailyItinerary] = field(default_factory=dict)
+    weather_forecasts: dict[str, dict[str, Any]] = field(default_factory=dict)
+    search_params: dict[str, Any] = field(default_factory=dict)
+    excluded_activity_types: list[ActivityType] = field(default_factory=list)
 
 
 class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
@@ -138,7 +136,7 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
     5. Ensuring activities are within budget constraints
     """
     
-    def __init__(self, config: Optional[AgentConfig] = None):
+    def __init__(self, config: AgentConfig | None = None):
         """
         Initialize the activity planning agent.
         
@@ -167,7 +165,7 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
         # self.add_tool(get_weather_forecast)
         # self.add_tool(calculate_travel_time)
         
-    async def run(self, input_data: Union[str, List[Dict[str, Any]]], context: Optional[ActivityPlanningContext] = None) -> Any:
+    async def run(self, input_data: str | list[dict[str, Any]], context: ActivityPlanningContext | None = None) -> Any:
         """
         Run the activity planning agent with the provided input and context.
         
@@ -187,11 +185,11 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
             result = await self.process(input_data, context)
             return result
         except Exception as e:
-            error_msg = f"Error in activity planning agent: {str(e)}"
+            error_msg = f"Error in activity planning agent: {e!s}"
             logger.error(error_msg)
             return {"error": error_msg}
     
-    async def process(self, input_data: Union[str, List[Dict[str, Any]]], context: ActivityPlanningContext) -> Dict[str, Any]:
+    async def process(self, input_data: str | list[dict[str, Any]], context: ActivityPlanningContext) -> dict[str, Any]:
         """
         Process the activity planning request.
         
@@ -202,9 +200,6 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
         Returns:
             Activity planning results
         """
-        # Prepare messages for the model
-        messages = self._prepare_messages(input_data)
-        
         # Extract activity preferences if not already set
         if not context.search_params:
             await self._extract_activity_preferences(input_data, context)
@@ -230,7 +225,7 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
             "summary": itinerary_summary
         }
         
-    async def _extract_activity_preferences(self, input_data: Union[str, List[Dict[str, Any]]], context: ActivityPlanningContext) -> None:
+    async def _extract_activity_preferences(self, input_data: str | list[dict[str, Any]], context: ActivityPlanningContext) -> None:
         """
         Extract activity preferences from user input.
         
@@ -258,9 +253,10 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
         if context.search_params:
             messages.append({"role": "system", "content": f"Current parameters: {context.search_params}"})
         
-        response = await self._call_model(messages)
+        # In a real implementation, we would call the model and parse the JSON response
+        # response = await self._call_model(messages)
         
-        # In a real implementation, we would parse the JSON response
+        # But for now we'll skip the actual API call
         # and update the context with the extracted preferences
         
         # For now, we'll set some example values for demonstration
@@ -289,7 +285,7 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
             "excluded_activity_types": [t.value for t in context.excluded_activity_types]
         }
     
-    async def _research_activities(self, context: ActivityPlanningContext) -> List[Activity]:
+    async def _research_activities(self, context: ActivityPlanningContext) -> list[Activity]:
         """
         Research activities at the destination based on context preferences.
         
@@ -495,7 +491,7 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
             
         return filtered_activities
     
-    async def _get_weather_forecasts(self, context: ActivityPlanningContext) -> Dict[str, Dict[str, Any]]:
+    async def _get_weather_forecasts(self, context: ActivityPlanningContext) -> dict[str, dict[str, Any]]:
         """
         Get weather forecasts for the destination during the trip dates.
         
@@ -537,7 +533,7 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
             
         return forecasts
     
-    async def _create_daily_itineraries(self, context: ActivityPlanningContext) -> Dict[str, DailyItinerary]:
+    async def _create_daily_itineraries(self, context: ActivityPlanningContext) -> dict[str, DailyItinerary]:
         """
         Create daily itineraries for the trip dates.
         
@@ -602,7 +598,7 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
                     date=date_str,
                     start_time="09:00",
                     end_time="12:00",
-                    notes=f"Visit in the morning to avoid crowds"
+                    notes="Visit in the morning to avoid crowds"
                 ))
                 
                 itinerary.total_cost += selected.price
@@ -620,7 +616,7 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
                     date=date_str,
                     start_time="14:00",
                     end_time="17:00",
-                    notes=f"Afternoon exploration"
+                    notes="Afternoon exploration"
                 ))
                 
                 itinerary.total_cost += selected.price
@@ -635,7 +631,7 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
                     date=date_str,
                     start_time="19:00",
                     end_time="21:00",
-                    notes=f"Evening entertainment"
+                    notes="Evening entertainment"
                 ))
                 
                 itinerary.total_cost += selected.price
@@ -720,7 +716,7 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
         # Return the generated summary
         return response.get("content", "")
     
-    def _get_latest_user_input(self, messages: List[Dict[str, Any]]) -> str:
+    def _get_latest_user_input(self, messages: list[dict[str, Any]]) -> str:
         """
         Extract the latest user input from a list of messages.
         
@@ -736,7 +732,7 @@ class ActivityPlanningAgent(BaseAgent[ActivityPlanningContext]):
         return ""
     
     @with_retry(max_attempts=3)
-    async def _call_model(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def _call_model(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Call the OpenAI API with the given messages.
         

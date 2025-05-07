@@ -7,9 +7,7 @@ optimizing, and managing the travel budget across all aspects of the trip.
 
 from dataclasses import dataclass, field
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union
-
-from pydantic import BaseModel
+from typing import Any
 
 from travel_planner.agents.base import AgentConfig, AgentContext, BaseAgent
 from travel_planner.utils.error_handling import with_retry
@@ -36,11 +34,11 @@ class BudgetItem:
     name: str
     amount: float
     currency: str
-    date: Optional[str] = None
+    date: str | None = None
     description: str = ""
     is_estimate: bool = True
     is_required: bool = False
-    alternatives: List[Dict[str, Any]] = field(default_factory=list)
+    alternatives: list[dict[str, Any]] = field(default_factory=list)
     
     @property
     def formatted_amount(self) -> str:
@@ -60,7 +58,7 @@ class BudgetAllocation:
     amount: float
     currency: str
     percentage: float
-    items: List[BudgetItem] = field(default_factory=list)
+    items: list[BudgetItem] = field(default_factory=list)
     
     @property
     def total_spent(self) -> float:
@@ -92,8 +90,8 @@ class BudgetRecommendation:
     recommended_amount: float
     currency: str
     saving: float
-    reasons: List[str] = field(default_factory=list)
-    alternatives: List[Dict[str, Any]] = field(default_factory=list)
+    reasons: list[str] = field(default_factory=list)
+    alternatives: list[dict[str, Any]] = field(default_factory=list)
 
 
 @dataclass
@@ -103,12 +101,12 @@ class BudgetContext(AgentContext):
     currency: str = "USD"
     trip_duration_days: int = 0
     traveler_count: int = 1
-    allocations: Dict[ExpenseCategory, BudgetAllocation] = field(default_factory=dict)
-    expenses: List[BudgetItem] = field(default_factory=list)
-    recommendations: List[BudgetRecommendation] = field(default_factory=list)
-    currency_conversions: Dict[Tuple[str, str], float] = field(default_factory=dict)
-    category_preferences: Dict[ExpenseCategory, int] = field(default_factory=dict)
-    alerts: List[str] = field(default_factory=list)
+    allocations: dict[ExpenseCategory, BudgetAllocation] = field(default_factory=dict)
+    expenses: list[BudgetItem] = field(default_factory=list)
+    recommendations: list[BudgetRecommendation] = field(default_factory=list)
+    currency_conversions: dict[tuple[str, str], float] = field(default_factory=dict)
+    category_preferences: dict[ExpenseCategory, int] = field(default_factory=dict)
+    alerts: list[str] = field(default_factory=list)
 
 
 class BudgetManagementAgent(BaseAgent[BudgetContext]):
@@ -123,7 +121,7 @@ class BudgetManagementAgent(BaseAgent[BudgetContext]):
     5. Generating budget reports and visualizations
     """
     
-    def __init__(self, config: Optional[AgentConfig] = None):
+    def __init__(self, config: AgentConfig | None = None):
         """
         Initialize the budget management agent.
         
@@ -152,7 +150,7 @@ class BudgetManagementAgent(BaseAgent[BudgetContext]):
         # self.add_tool(find_deals)
         # self.add_tool(calculate_savings)
         
-    async def run(self, input_data: Union[str, List[Dict[str, Any]]], context: Optional[BudgetContext] = None) -> Any:
+    async def run(self, input_data: str | list[dict[str, Any]], context: BudgetContext | None = None) -> Any:
         """
         Run the budget management agent with the provided input and context.
         
@@ -172,11 +170,11 @@ class BudgetManagementAgent(BaseAgent[BudgetContext]):
             result = await self.process(input_data, context)
             return result
         except Exception as e:
-            error_msg = f"Error in budget management agent: {str(e)}"
+            error_msg = f"Error in budget management agent: {e!s}"
             logger.error(error_msg)
             return {"error": error_msg}
     
-    async def process(self, input_data: Union[str, List[Dict[str, Any]]], context: BudgetContext) -> Dict[str, Any]:
+    async def process(self, input_data: str | list[dict[str, Any]], context: BudgetContext) -> dict[str, Any]:
         """
         Process the budget management request.
         
@@ -187,9 +185,6 @@ class BudgetManagementAgent(BaseAgent[BudgetContext]):
         Returns:
             Budget management results
         """
-        # Prepare messages for the model
-        messages = self._prepare_messages(input_data)
-        
         # Extract budget parameters if not already set
         if context.total_budget == 0.0:
             await self._extract_budget_parameters(input_data, context)
@@ -223,7 +218,7 @@ class BudgetManagementAgent(BaseAgent[BudgetContext]):
             "report": budget_report
         }
         
-    async def _extract_budget_parameters(self, input_data: Union[str, List[Dict[str, Any]]], context: BudgetContext) -> None:
+    async def _extract_budget_parameters(self, input_data: str | list[dict[str, Any]], context: BudgetContext) -> None:
         """
         Extract budget parameters from user input.
         
@@ -231,25 +226,26 @@ class BudgetManagementAgent(BaseAgent[BudgetContext]):
             input_data: User input or conversation history
             context: Budget context
         """
-        # Prepare a specific prompt for parameter extraction
-        extraction_prompt = (
-            "Please extract budget parameters from the following user input. "
-            "Include total budget, currency, trip duration in days, traveler count, "
-            "and any category preferences or priorities. "
-            "Format your response as a JSON object.\n\n"
-            "User input: {input}"
-        )
+        # In a real implementation, we would prepare prompts and extract data from user input
+        # extraction_prompt = (
+        #     "Please extract budget parameters from the following user input. "
+        #     "Include total budget, currency, trip duration in days, traveler count, "
+        #     "and any category preferences or priorities. "
+        #     "Format your response as a JSON object.\n\n"
+        #     "User input: {input}"
+        # )
+        # 
+        # user_input = input_data if isinstance(input_data, str) else self._get_latest_user_input(input_data)
         
-        user_input = input_data if isinstance(input_data, str) else self._get_latest_user_input(input_data)
+        # Prepare messages for the model, but we don't actually use them in this demo
+        # messages = [
+        #     {"role": "system", "content": self.instructions},
+        #     {"role": "user", "content": extraction_prompt.format(input=user_input)}
+        # ]
         
-        messages = [
-            {"role": "system", "content": self.instructions},
-            {"role": "user", "content": extraction_prompt.format(input=user_input)}
-        ]
+        # In a real implementation, we would call the model and parse the JSON response
+        # response = await self._call_model(messages)
         
-        response = await self._call_model(messages)
-        
-        # In a real implementation, we would parse the JSON response
         # and update the context with the extracted parameters
         
         # For now, we'll set some example values for demonstration
@@ -333,7 +329,7 @@ class BudgetManagementAgent(BaseAgent[BudgetContext]):
                 percentage=percentage
             )
     
-    async def _extract_expenses(self, input_data: Union[str, List[Dict[str, Any]]], context: BudgetContext) -> List[BudgetItem]:
+    async def _extract_expenses(self, input_data: str | list[dict[str, Any]], context: BudgetContext) -> list[BudgetItem]:
         """
         Extract expense items from user input.
         
@@ -344,14 +340,15 @@ class BudgetManagementAgent(BaseAgent[BudgetContext]):
         Returns:
             List of extracted expense items
         """
-        # Prepare a specific prompt for expense extraction
-        extraction_prompt = (
-            "Please extract expense items from the following user input. "
-            "Include category, name, amount, currency, date, and description for each item. "
-            "Format your response as a JSON array of expense objects.\n\n"
-            "User input: {input}"
-        )
+        # In a real implementation, we would prepare a specific prompt for expense extraction
+        # extraction_prompt = (
+        #     "Please extract expense items from the following user input. "
+        #     "Include category, name, amount, currency, date, and description for each item. "
+        #     "Format your response as a JSON array of expense objects.\n\n"
+        #     "User input: {input}"
+        # )
         
+        # Extract the user input
         user_input = input_data if isinstance(input_data, str) else self._get_latest_user_input(input_data)
         
         # Check if the input likely contains expense information
@@ -359,14 +356,15 @@ class BudgetManagementAgent(BaseAgent[BudgetContext]):
         if not any(keyword in user_input.lower() for keyword in expense_keywords):
             return []  # No expense information found
         
-        messages = [
-            {"role": "system", "content": self.instructions},
-            {"role": "user", "content": extraction_prompt.format(input=user_input)}
-        ]
+        # In a real implementation, we would prepare messages for the model
+        # messages = [
+        #     {"role": "system", "content": self.instructions},
+        #     {"role": "user", "content": extraction_prompt.format(input=user_input)}
+        # ]
         
-        response = await self._call_model(messages)
+        # In a real implementation, we would call the model and parse the JSON response
+        # response = await self._call_model(messages)
         
-        # In a real implementation, we would parse the JSON response
         # and create BudgetItem objects from the extracted expenses
         
         # For demo purposes, we'll return some example expenses if the input seems expense-related
@@ -460,7 +458,7 @@ class BudgetManagementAgent(BaseAgent[BudgetContext]):
                     f"{(allocation.total_spent - allocation.amount):.2f} {context.currency}"
                 )
     
-    async def _generate_recommendations(self, context: BudgetContext) -> List[BudgetRecommendation]:
+    async def _generate_recommendations(self, context: BudgetContext) -> list[BudgetRecommendation]:
         """
         Generate budget recommendations based on expenses and allocations.
         
@@ -667,7 +665,7 @@ class BudgetManagementAgent(BaseAgent[BudgetContext]):
         # Return the generated report
         return response.get("content", "")
     
-    def _get_latest_user_input(self, messages: List[Dict[str, Any]]) -> str:
+    def _get_latest_user_input(self, messages: list[dict[str, Any]]) -> str:
         """
         Extract the latest user input from a list of messages.
         
@@ -683,7 +681,7 @@ class BudgetManagementAgent(BaseAgent[BudgetContext]):
         return ""
     
     @with_retry(max_attempts=3)
-    async def _call_model(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+    async def _call_model(self, messages: list[dict[str, Any]]) -> dict[str, Any]:
         """
         Call the OpenAI API with the given messages.
         

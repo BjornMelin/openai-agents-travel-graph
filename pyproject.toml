@@ -72,6 +72,8 @@ multi_line_output = 3
 [tool.ruff]
 line-length = 88
 target-version = "py312"
+
+[tool.ruff.lint]
 select = ["E", "F", "B", "I", "N", "UP", "PL", "RUF"]
 ignore = []
 
