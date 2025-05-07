@@ -12,7 +12,7 @@ import pytest  # noqa: E402
 
 from travel_planner.agents.base import (  # noqa: E402
     AgentConfig,
-    BaseAgent, 
+    BaseAgent,
     InvalidConfigurationException,
 )
 

@@ -19,8 +19,12 @@ setup_mock_langgraph()
 
 # Now import the modules that depend on LangGraph
 from travel_planner.data.models import TravelPlan, TravelQuery  # noqa: E402
-from travel_planner.orchestration.states.planning_state import TravelPlanningState  # noqa: E402
-from travel_planner.orchestration.states.workflow_stages import WorkflowStage  # noqa: E402
+from travel_planner.orchestration.states.planning_state import (  # noqa: E402
+    TravelPlanningState,
+)
+from travel_planner.orchestration.states.workflow_stages import (  # noqa: E402
+    WorkflowStage,
+)
 from travel_planner.orchestration.workflow import TravelWorkflow  # noqa: E402
 
 
