@@ -2,6 +2,12 @@
 Unit tests for the base agent class.
 """
 
+# Import mock OpenAI before anything else
+from tests.unit.mock_openai import setup_mock_openai
+
+# Set up mock OpenAI client
+setup_mock_openai()
+
 
 import pytest
 

@@ -6,6 +6,10 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+# Register asyncio marker
+pytest.importorskip("pytest_asyncio")
+pytest.mark.asyncio = pytest.mark.asyncio
+
 from travel_planner.agents.base import AgentConfig
 from travel_planner.config import APIConfig, SystemConfig, TravelPlannerConfig
 from travel_planner.utils import LogLevel, setup_logging
