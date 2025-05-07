@@ -9,8 +9,8 @@ from travel_planner.agents.base import (
     AgentConfig,
     AgentContext,
     BaseAgent,
-    InvalidConfigurationException,
-    TravelPlannerAgentException,
+    InvalidConfigurationError,
+    TravelPlannerAgentError,
 )
 from travel_planner.agents.destination_research import (
     DestinationContext,
@@ -43,10 +43,10 @@ __all__ = [
     "FlightOption",
     "FlightSearchAgent",
     "FlightSearchContext",
-    "InvalidConfigurationException",
+    "InvalidConfigurationError",
     "OrchestratorAgent",
     "OrchestratorContext",
     "PlanningStage",
-    "TravelPlannerAgentException",
+    "TravelPlannerAgentError",
     "TravelRequirements",
 ]

@@ -29,7 +29,7 @@ def test_agent_initialization():
         instructions="Test instructions",
     )
     agent = BaseAgent(config)
-    
+
     assert agent.name == "Test Agent"
     assert agent.instructions == "Test instructions"
     assert agent.config.model == "gpt-4o"  # Default model
@@ -46,7 +46,7 @@ def test_agent_initialization_invalid_config():
         )
         agent = BaseAgent(config)
         agent._validate_config()
-    
+
     # Missing instructions
     with pytest.raises(InvalidConfigurationException):
         config = AgentConfig(
@@ -64,9 +64,9 @@ def test_prepare_messages_string_input():
         instructions="Test instructions",
     )
     agent = BaseAgent(config)
-    
+
     messages = agent._prepare_messages("Hello")
-    
+
     assert len(messages) == SINGLE_MESSAGE_COUNT
     assert messages[0]["role"] == "system"
     assert messages[0]["content"] == "Test instructions"
@@ -81,15 +81,15 @@ def test_prepare_messages_list_input():
         instructions="Test instructions",
     )
     agent = BaseAgent(config)
-    
+
     input_messages = [
         {"role": "user", "content": "Hello"},
         {"role": "assistant", "content": "Hi there"},
         {"role": "user", "content": "How are you?"},
     ]
-    
+
     messages = agent._prepare_messages(input_messages)
-    
+
     assert len(messages) == MULTI_MESSAGE_COUNT  # Input messages + system message
     assert messages[0]["role"] == "system"
     assert messages[0]["content"] == "Test instructions"
@@ -103,14 +103,14 @@ def test_prepare_messages_with_existing_system():
         instructions="Test instructions",
     )
     agent = BaseAgent(config)
-    
+
     input_messages = [
         {"role": "system", "content": "Existing instructions"},
         {"role": "user", "content": "Hello"},
     ]
-    
+
     messages = agent._prepare_messages(input_messages)
-    
+
     assert len(messages) == SINGLE_MESSAGE_COUNT
     assert messages[0]["role"] == "system"
     assert messages[0]["content"] == "Existing instructions"  # Preserved
@@ -126,7 +126,7 @@ async def test_run_method_not_implemented():
         instructions="Test instructions",
     )
     agent = BaseAgent(config)
-    
+
     with pytest.raises(NotImplementedError):
         await agent.run("Hello")
 
@@ -139,6 +139,6 @@ async def test_process_method_not_implemented():
         instructions="Test instructions",
     )
     agent = BaseAgent(config)
-    
+
     with pytest.raises(NotImplementedError):
         await agent.process("Hello", None)

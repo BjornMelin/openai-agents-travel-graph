@@ -7,7 +7,7 @@ process, including queries, user preferences, and the final travel plan.
 
 from datetime import date, datetime
 from enum import Enum
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -62,26 +62,28 @@ class ActivityType(str, Enum):
 
 class AccommodationSearchParams(BaseModel):
     """Parameters for accommodation search."""
+
     destination: str
     check_in_date: date
     check_out_date: date
     adults: int = 2
     children: int = 0
     rooms: int = 1
-    accommodation_type: Optional[AccommodationType] = None
-    amenities: Optional[list[str]] = None
-    max_price: Optional[float] = None
-    min_rating: Optional[float] = None
+    accommodation_type: AccommodationType | None = None
+    amenities: list[str] | None = None
+    max_price: float | None = None
+    min_rating: float | None = None
     max_results: int = 5
     sort_by: str = "popularity"
 
 
 class FlightSearchParams(BaseModel):
     """Parameters for flight search."""
+
     origin: str
     destination: str
     departure_date: date
-    return_date: Optional[date] = None
+    return_date: date | None = None
     adults: int = 1
     children: int = 0
     travel_class: TravelMode = TravelMode.ECONOMY
@@ -91,22 +93,26 @@ class FlightSearchParams(BaseModel):
 
 class NodeFunctionParams(BaseModel):
     """Parameters for creating node functions."""
+
     agent_class: Any  # Type[BaseAgent], using Any to avoid circular imports
     task_name: str
-    complete_stage: Any  # WorkflowStage 
+    complete_stage: Any  # WorkflowStage
     result_field: str
     plan_field: str
     message_template: str
-    
-    
+
+
 class AgentTaskParams(BaseModel):
     """Parameters for executing agent tasks."""
+
     state: Any  # TravelPlanningState
     agent: Any  # BaseAgent
     task_name: str
     complete_stage: Any  # WorkflowStage
     result_formatter: Any  # Callable[[dict[str, Any]], str]
-    result_processor: Any = None  # Callable[[TravelPlanningState, dict[str, Any]], None] | None
+    result_processor: Any = (
+        None  # Callable[[TravelPlanningState, dict[str, Any]], None] | None
+    )
     ENTERTAINMENT = "entertainment"
     NATURE = "nature"
     EDUCATIONAL = "educational"

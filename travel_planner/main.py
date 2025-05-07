@@ -33,6 +33,9 @@ from travel_planner.utils.rate_limiting import initialize_rate_limiting
 # Initialize logger
 logger = get_logger(__name__)
 
+# Constants
+SAVE_COMMAND_LENGTH = 5  # Length of the "save " command prefix
+
 
 def setup_argparse() -> argparse.ArgumentParser:
     """
@@ -194,7 +197,11 @@ async def run_interactive_mode(args: argparse.Namespace) -> None:
         # Check for save command
         if user_input.lower().startswith("save"):
             if travel_plan:
-                path = user_input[5:].strip() if len(user_input) > 5 else None
+                path = (
+                    user_input[SAVE_COMMAND_LENGTH:].strip()
+                    if len(user_input) > SAVE_COMMAND_LENGTH
+                    else None
+                )
                 await save_travel_plan(travel_plan, path, args.format)
                 print("\nTravel Planner: Travel plan saved successfully.")
             else:
@@ -264,7 +271,7 @@ def display_travel_plan(plan: TravelPlan) -> None:
         print("Flights:")
         for i, flight in enumerate(plan.flights):
             print(
-                f"  {i+1}. {flight.airline}: {flight.departure_location} to "
+                f"  {i + 1}. {flight.airline}: {flight.departure_location} to "
                 f"{flight.arrival_location}"
             )
             print(
@@ -278,7 +285,7 @@ def display_travel_plan(plan: TravelPlan) -> None:
     if plan.accommodations and len(plan.accommodations) > 0:
         print("Accommodations:")
         for i, acc in enumerate(plan.accommodations):
-            print(f"  {i+1}. {acc.name} ({acc.type})")
+            print(f"  {i + 1}. {acc.name} ({acc.type})")
             print(
                 f"     {acc.check_in_date.strftime('%Y-%m-%d')} to "
                 f"{acc.check_out_date.strftime('%Y-%m-%d')}"
@@ -293,10 +300,10 @@ def display_travel_plan(plan: TravelPlan) -> None:
     if plan.daily_itinerary and len(plan.daily_itinerary) > 0:
         print("Daily Itinerary:")
         for i, day in enumerate(plan.daily_itinerary):
-            print(f"  Day {i+1} ({day.date.strftime('%Y-%m-%d')}):")
+            print(f"  Day {i + 1} ({day.date.strftime('%Y-%m-%d')}):")
             for j, activity in enumerate(day.activities):
                 print(
-                    f"     {j+1}. {activity.name} "
+                    f"     {j + 1}. {activity.name} "
                     f"({activity.time_start.strftime('%H:%M')} - "
                     f"{activity.time_end.strftime('%H:%M')})"
                 )
@@ -329,7 +336,7 @@ async def save_travel_plan(
         format_type: Format type (json, text, html, pdf)
     """
     file_path = _prepare_file_path(plan, file_path, format_type)
-    
+
     # Save the plan in the specified format
     if format_type == "json":
         _save_as_json(plan, file_path)
@@ -343,7 +350,9 @@ async def save_travel_plan(
     logger.info(f"Travel plan saved to {file_path}")
 
 
-def _prepare_file_path(plan: TravelPlan, file_path: str | None, format_type: str) -> str:
+def _prepare_file_path(
+    plan: TravelPlan, file_path: str | None, format_type: str
+) -> str:
     """Prepare the file path for saving the travel plan."""
     if not file_path:
         # Generate a default filename
@@ -355,7 +364,7 @@ def _prepare_file_path(plan: TravelPlan, file_path: str | None, format_type: str
     directory = os.path.dirname(file_path)
     if directory and not os.path.exists(directory):
         os.makedirs(directory)
-        
+
     return file_path
 
 
@@ -378,7 +387,7 @@ def _save_as_text(plan: TravelPlan, file_path: str) -> None:
         # Write header and overview
         _write_text_header(f, plan)
         _write_text_overview(f, plan)
-        
+
         # Write main sections
         _write_text_flights(f, plan)
         _write_text_accommodations(f, plan)
@@ -403,7 +412,7 @@ def _write_text_overview(f: TextIO, plan: TravelPlan) -> None:
     """Write the overview section to the text file."""
     if not plan.overview:
         return
-        
+
     f.write("OVERVIEW\n")
     f.write("-" * 8 + "\n")
     f.write(f"{plan.overview}\n\n")
@@ -413,29 +422,20 @@ def _write_text_flights(f: TextIO, plan: TravelPlan) -> None:
     """Write flight information to the text file."""
     if not plan.flights or len(plan.flights) == 0:
         return
-        
+
     f.write("FLIGHTS\n")
     f.write("-" * 7 + "\n")
-    
+
     for i, flight in enumerate(plan.flights):
-        f.write(f"{i+1}. {flight.airline}: {flight.flight_number}\n")
-        f.write(
-            f"   From: {flight.departure_airport} - "
-            f"To: {flight.arrival_airport}\n"
-        )
-        f.write(
-            f"   Departure: "
-            f"{flight.departure_time.strftime('%Y-%m-%d %H:%M')}\n"
-        )
-        f.write(
-            f"   Arrival: "
-            f"{flight.arrival_time.strftime('%Y-%m-%d %H:%M')}\n"
-        )
+        f.write(f"{i + 1}. {flight.airline}: {flight.flight_number}\n")
+        f.write(f"   From: {flight.departure_airport} - To: {flight.arrival_airport}\n")
+        f.write(f"   Departure: {flight.departure_time.strftime('%Y-%m-%d %H:%M')}\n")
+        f.write(f"   Arrival: {flight.arrival_time.strftime('%Y-%m-%d %H:%M')}\n")
         f.write(f"   Class: {flight.travel_class.value}\n")
         f.write(f"   Price: {flight.currency} {flight.price:.2f}\n")
-        
+
         _write_text_flight_layovers(f, flight)
-        
+
         f.write(f"   Duration: {flight.duration_minutes} minutes\n")
         if flight.booking_link:
             f.write(f"   Booking: {flight.booking_link}\n")
@@ -446,11 +446,11 @@ def _write_text_flight_layovers(f: TextIO, flight: Flight) -> None:
     """Write flight layover information to the text file."""
     if not flight.layovers or len(flight.layovers) == 0:
         return
-        
+
     f.write(f"   Layovers: {len(flight.layovers)}\n")
     for j, layover in enumerate(flight.layovers):
         f.write(
-            f"      {j+1}. {layover.get('airport', 'Unknown')} - "
+            f"      {j + 1}. {layover.get('airport', 'Unknown')} - "
             f"Duration: {layover.get('duration_minutes', 0)} min\n"
         )
 
@@ -459,25 +459,19 @@ def _write_text_accommodations(f: TextIO, plan: TravelPlan) -> None:
     """Write accommodation information to the text file."""
     if not plan.accommodation or len(plan.accommodation) == 0:
         return
-        
+
     f.write("ACCOMMODATIONS\n")
     f.write("-" * 14 + "\n")
-    
+
     for i, acc in enumerate(plan.accommodation):
-        f.write(f"{i+1}. {acc.name} ({acc.type.value})\n")
+        f.write(f"{i + 1}. {acc.name} ({acc.type.value})\n")
         f.write(f"   Address: {acc.address}\n")
         if acc.rating:
             f.write(f"   Rating: {acc.rating}/5\n")
-        f.write(
-            f"   Check-in: {acc.check_in_time} - "
-            f"Check-out: {acc.check_out_time}\n"
-        )
-        f.write(
-            f"   Price per night: {acc.currency} "
-            f"{acc.price_per_night:.2f}\n"
-        )
+        f.write(f"   Check-in: {acc.check_in_time} - Check-out: {acc.check_out_time}\n")
+        f.write(f"   Price per night: {acc.currency} {acc.price_per_night:.2f}\n")
         f.write(f"   Total price: {acc.currency} {acc.total_price:.2f}\n")
-        
+
         if acc.amenities and len(acc.amenities) > 0:
             f.write(f"   Amenities: {', '.join(acc.amenities)}\n")
         if acc.booking_link:
@@ -489,26 +483,26 @@ def _write_text_activities(f: TextIO, plan: TravelPlan) -> None:
     """Write activities information to the text file."""
     if not plan.activities or len(plan.activities) == 0:
         return
-        
+
     f.write("DAILY ITINERARY\n")
     f.write("-" * 15 + "\n")
-    
+
     for _day_key, day in plan.activities.items():
         f.write(f"Day {day.day_number} - {day.date.strftime('%Y-%m-%d')}\n")
-        
+
         # Write weather if available
         _write_text_day_weather(f, day)
-        
+
         # Write activities
         _write_text_day_activities(f, day)
-        
+
         # Write transportation
         _write_text_day_transportation(f, day)
-        
+
         # Write notes
         if day.notes:
             f.write(f"   Notes: {day.notes}\n")
-            
+
         f.write("\n")
 
 
@@ -516,7 +510,7 @@ def _write_text_day_weather(f: TextIO, day: DayItinerary) -> None:
     """Write day weather information to the text file."""
     if not day.weather_forecast:
         return
-        
+
     weather = day.weather_forecast
     f.write(
         f"   Weather: {weather.get('description', 'N/A')}, "
@@ -528,7 +522,7 @@ def _write_text_day_activities(f: TextIO, day: DayItinerary) -> None:
     """Write day activities information to the text file."""
     if not day.activities or len(day.activities) == 0:
         return
-        
+
     for i, activity in enumerate(day.activities):
         duration_hours = activity.duration_minutes // 60
         duration_mins = activity.duration_minutes % 60
@@ -538,19 +532,17 @@ def _write_text_day_activities(f: TextIO, day: DayItinerary) -> None:
             else f"{duration_mins}m"
         )
 
-        f.write(f"   {i+1}. {activity.name} ({activity.type.value})\n")
+        f.write(f"   {i + 1}. {activity.name} ({activity.type.value})\n")
         f.write(f"      {activity.description}\n")
         f.write(f"      Location: {activity.location}\n")
         f.write(f"      Duration: {duration}\n")
-        
+
         if activity.cost:
             f.write(f"      Cost: {activity.currency} {activity.cost:.2f}\n")
-            
+
         if activity.booking_required:
             booking_info = (
-                f" - {activity.booking_link}"
-                if activity.booking_link
-                else ""
+                f" - {activity.booking_link}" if activity.booking_link else ""
             )
             f.write(f"      Booking required{booking_info}\n")
 
@@ -559,42 +551,31 @@ def _write_text_day_transportation(f: TextIO, day: DayItinerary) -> None:
     """Write day transportation information to the text file."""
     if not day.transportation or len(day.transportation) == 0:
         return
-        
+
     f.write("   Transportation:\n")
     for i, transport in enumerate(day.transportation):
-        f.write(
-            f"      {i+1}. {transport.type.value}: "
-            f"{transport.description}\n"
-        )
+        f.write(f"      {i + 1}. {transport.type.value}: {transport.description}\n")
         if transport.cost:
-            f.write(
-                f"         Cost: {transport.currency} "
-                f"{transport.cost:.2f}\n"
-            )
+            f.write(f"         Cost: {transport.currency} {transport.cost:.2f}\n")
 
 
 def _write_text_budget(f: TextIO, plan: TravelPlan) -> None:
     """Write budget information to the text file."""
     if not plan.budget:
         return
-        
+
     f.write("BUDGET SUMMARY\n")
     f.write("-" * 14 + "\n")
-    f.write(
-        f"Total budget: {plan.budget.currency} "
-        f"{plan.budget.total_budget:.2f}\n"
-    )
+    f.write(f"Total budget: {plan.budget.currency} {plan.budget.total_budget:.2f}\n")
     f.write(f"Spent: {plan.budget.currency} {plan.budget.spent:.2f}\n")
-    f.write(
-        f"Remaining: {plan.budget.currency} {plan.budget.remaining:.2f}\n"
-    )
+    f.write(f"Remaining: {plan.budget.currency} {plan.budget.remaining:.2f}\n")
 
     # Write budget breakdown
     _write_text_budget_breakdown(f, plan)
-    
+
     # Write saving recommendations
     _write_text_saving_recommendations(f, plan)
-    
+
     f.write("\n")
 
 
@@ -602,7 +583,7 @@ def _write_text_budget_breakdown(f: TextIO, plan: TravelPlan) -> None:
     """Write budget breakdown to the text file."""
     if not plan.budget or not plan.budget.breakdown or len(plan.budget.breakdown) == 0:
         return
-        
+
     f.write("Breakdown:\n")
     for category, amount in plan.budget.breakdown.items():
         f.write(f"   {category}: {plan.budget.currency} {amount:.2f}\n")
@@ -612,24 +593,24 @@ def _write_text_saving_recommendations(f: TextIO, plan: TravelPlan) -> None:
     """Write saving recommendations to the text file."""
     if not plan.budget or not plan.budget.saving_recommendations:
         return
-        
+
     if len(plan.budget.saving_recommendations) == 0:
         return
-        
+
     f.write("Saving Recommendations:\n")
     for i, rec in enumerate(plan.budget.saving_recommendations):
-        f.write(f"   {i+1}. {rec}\n")
+        f.write(f"   {i + 1}. {rec}\n")
 
 
 def _write_text_recommendations(f: TextIO, plan: TravelPlan) -> None:
     """Write recommendations to the text file."""
     if not plan.recommendations or len(plan.recommendations) == 0:
         return
-        
+
     f.write("RECOMMENDATIONS\n")
     f.write("-" * 16 + "\n")
     for i, rec in enumerate(plan.recommendations):
-        f.write(f"{i+1}. {rec}\n")
+        f.write(f"{i + 1}. {rec}\n")
     f.write("\n")
 
 
@@ -637,17 +618,17 @@ def _write_text_alerts(f: TextIO, plan: TravelPlan) -> None:
     """Write alerts to the text file."""
     if not plan.alerts or len(plan.alerts) == 0:
         return
-        
+
     f.write("IMPORTANT ALERTS\n")
     f.write("-" * 16 + "\n")
     for i, alert in enumerate(plan.alerts):
-        f.write(f"{i+1}. {alert}\n")
+        f.write(f"{i + 1}. {alert}\n")
 
 
 def _save_as_html(plan: TravelPlan, file_path: str) -> None:
     """Save the travel plan as HTML."""
     destination_name = _get_destination_name(plan)
-    
+
     # Generate HTML content
     html_parts = [
         _generate_html_header(destination_name),
@@ -658,11 +639,11 @@ def _save_as_html(plan: TravelPlan, file_path: str) -> None:
         _generate_html_budget(plan),
         _generate_html_recommendations(plan),
         _generate_html_alerts(plan),
-        _generate_html_footer()
+        _generate_html_footer(),
     ]
-    
-    html_content = ''.join(html_parts)
-    
+
+    html_content = "".join(html_parts)
+
     with open(file_path, "w") as f:
         f.write(html_content)
 
@@ -783,7 +764,7 @@ def _generate_html_overview(plan: TravelPlan) -> str:
     """Generate HTML overview section."""
     if not plan.overview:
         return ""
-        
+
     return f"""
     <div class="card">
         <h2>Overview</h2>
@@ -796,14 +777,14 @@ def _generate_html_flights(plan: TravelPlan) -> str:
     """Generate HTML flights section."""
     if not plan.flights or len(plan.flights) == 0:
         return ""
-        
+
     html = """
     <h2>Flights</h2>
 """
-    
+
     for flight in plan.flights:
         html += _generate_html_flight_card(flight)
-        
+
     return html
 
 
@@ -815,33 +796,33 @@ def _generate_html_flight_card(flight: Flight) -> str:
         <p><strong>From:</strong> {flight.departure_airport} &rarr;
            <strong>To:</strong> {flight.arrival_airport}</p>
         <p><strong>Departure:</strong> 
-           {flight.departure_time.strftime('%Y-%m-%d %H:%M')}</p>
+           {flight.departure_time.strftime("%Y-%m-%d %H:%M")}</p>
         <p><strong>Arrival:</strong> 
-           {flight.arrival_time.strftime('%Y-%m-%d %H:%M')}</p>
+           {flight.arrival_time.strftime("%Y-%m-%d %H:%M")}</p>
         <p><strong>Class:</strong> {flight.travel_class.value}</p>
         <p><strong>Duration:</strong> 
            {flight.duration_minutes // 60}h {flight.duration_minutes % 60}m</p>
 """
-    
+
     # Add layovers if any
     if flight.layovers and len(flight.layovers) > 0:
         html += _generate_html_flight_layovers(flight)
-    
+
     # Add price and booking link
     html += f"""
         <p class="price"><strong>Price:</strong> 
            {flight.currency} {flight.price:.2f}</p>
 """
-    
+
     if flight.booking_link:
         html += f"""
         <p><a href="{flight.booking_link}" target="_blank">Booking Link</a></p>
 """
-    
+
     html += """
     </div>
 """
-    
+
     return html
 
 
@@ -851,17 +832,17 @@ def _generate_html_flight_layovers(flight: Flight) -> str:
         <p><strong>Layovers:</strong> {len(flight.layovers)}</p>
         <ul>
 """
-    
+
     for layover in flight.layovers:
         html += f"""
-            <li>{layover.get('airport', 'Unknown')} - Duration: 
-               {layover.get('duration_minutes', 0)} minutes</li>
+            <li>{layover.get("airport", "Unknown")} - Duration: 
+               {layover.get("duration_minutes", 0)} minutes</li>
 """
-    
+
     html += """
         </ul>
 """
-    
+
     return html
 
 
@@ -869,14 +850,14 @@ def _generate_html_accommodations(plan: TravelPlan) -> str:
     """Generate HTML accommodations section."""
     if not plan.accommodation or len(plan.accommodation) == 0:
         return ""
-        
+
     html = """
     <h2>Accommodations</h2>
 """
-    
+
     for acc in plan.accommodation:
         html += _generate_html_accommodation_card(acc)
-        
+
     return html
 
 
@@ -887,12 +868,12 @@ def _generate_html_accommodation_card(acc: Accommodation) -> str:
         <h3>{acc.name} ({acc.type.value})</h3>
         <p><strong>Address:</strong> {acc.address}</p>
 """
-    
+
     if acc.rating:
         html += f"""
         <p><strong>Rating:</strong> {acc.rating}/5</p>
 """
-    
+
     html += f"""
         <p><strong>Check-in:</strong> {acc.check_in_time} - 
            <strong>Check-out:</strong> {acc.check_out_time}</p>
@@ -903,21 +884,21 @@ def _generate_html_accommodation_card(acc: Accommodation) -> str:
             <strong>Total price:</strong> {acc.currency} {acc.total_price:.2f}
         </p>
 """
-    
+
     if acc.amenities and len(acc.amenities) > 0:
         html += f"""
-        <p><strong>Amenities:</strong> {', '.join(acc.amenities)}</p>
+        <p><strong>Amenities:</strong> {", ".join(acc.amenities)}</p>
 """
-    
+
     if acc.booking_link:
         html += f"""
         <p><a href="{acc.booking_link}" target="_blank">Booking Link</a></p>
 """
-    
+
     html += """
     </div>
 """
-    
+
     return html
 
 
@@ -925,17 +906,17 @@ def _generate_html_activities(plan: TravelPlan) -> str:
     """Generate HTML activities section."""
     if not plan.activities or len(plan.activities) == 0:
         return ""
-        
+
     html = """
     <h2>Daily Itinerary</h2>
 """
-    
+
     # Sort days by day number to ensure correct order
     sorted_days = sorted(plan.activities.items(), key=lambda x: x[1].day_number)
-    
+
     for _day_key, day in sorted_days:
         html += _generate_html_day_card(day)
-        
+
     return html
 
 
@@ -944,26 +925,26 @@ def _generate_html_day_card(day: DayItinerary) -> str:
     html = f"""
     <div class="day">
         <div class="day-header">
-            <h3>Day {day.day_number} - {day.date.strftime('%Y-%m-%d')}</h3>
+            <h3>Day {day.day_number} - {day.date.strftime("%Y-%m-%d")}</h3>
 """
-    
+
     if day.weather_forecast:
         weather = day.weather_forecast
         html += f"""
-            <p><strong>Weather:</strong> {weather.get('description', 'N/A')},
-               {weather.get('temperature', 'N/A')}°C</p>
+            <p><strong>Weather:</strong> {weather.get("description", "N/A")},
+               {weather.get("temperature", "N/A")}°C</p>
 """
-    
+
     html += """
         </div>
 """
-    
+
     # Add activities
     html += _generate_html_day_activities(day)
-    
+
     # Add transportation
     html += _generate_html_day_transportation(day)
-    
+
     # Add notes
     if day.notes:
         html += f"""
@@ -972,11 +953,11 @@ def _generate_html_day_card(day: DayItinerary) -> str:
             <p>{day.notes}</p>
         </div>
 """
-    
+
     html += """
     </div>
 """
-    
+
     return html
 
 
@@ -984,11 +965,11 @@ def _generate_html_day_activities(day: DayItinerary) -> str:
     """Generate HTML for day activities."""
     if not day.activities or len(day.activities) == 0:
         return ""
-        
+
     html = """
         <h4>Activities</h4>
 """
-    
+
     for activity in day.activities:
         duration_hours = activity.duration_minutes // 60
         duration_mins = activity.duration_minutes % 60
@@ -1005,14 +986,14 @@ def _generate_html_day_activities(day: DayItinerary) -> str:
             <p><strong>Location:</strong> {activity.location}</p>
             <p><strong>Duration:</strong> {duration}</p>
 """
-        
+
         if activity.cost:
             html += f"""
             <p class="price">
                 <strong>Cost:</strong> {activity.currency} {activity.cost:.2f}
             </p>
 """
-        
+
         if activity.booking_required:
             html += """
             <p><strong>Booking required</strong></p>
@@ -1021,11 +1002,11 @@ def _generate_html_day_activities(day: DayItinerary) -> str:
                 html += f"""
             <p><a href="{activity.booking_link}" target="_blank">Booking Link</a></p>
 """
-        
+
         html += """
         </div>
 """
-    
+
     return html
 
 
@@ -1033,41 +1014,37 @@ def _generate_html_day_transportation(day: DayItinerary) -> str:
     """Generate HTML for day transportation."""
     if not day.transportation or len(day.transportation) == 0:
         return ""
-        
+
     html = """
         <h4>Transportation</h4>
 """
-    
+
     for transport in day.transportation:
         html += f"""
         <div class="transportation card">
             <h5>{transport.type.value}</h5>
             <p>{transport.description}</p>
 """
-        
+
         if transport.cost:
             html += f"""
             <p class="price">
                 <strong>Cost:</strong> {transport.currency} {transport.cost:.2f}
             </p>
 """
-        
+
         if transport.duration_minutes:
             dur_hours = transport.duration_minutes // 60
             dur_mins = transport.duration_minutes % 60
-            dur_str = (
-                f"{dur_hours}h {dur_mins}m"
-                if dur_hours > 0
-                else f"{dur_mins}m"
-            )
+            dur_str = f"{dur_hours}h {dur_mins}m" if dur_hours > 0 else f"{dur_mins}m"
             html += f"""
             <p><strong>Duration:</strong> {dur_str}</p>
 """
-        
+
         html += """
         </div>
 """
-    
+
     return html
 
 
@@ -1075,12 +1052,12 @@ def _generate_html_budget(plan: TravelPlan) -> str:
     """Generate HTML budget section."""
     if not plan.budget:
         return ""
-        
+
     html = """
     <h2>Budget Summary</h2>
     <div class="card">
 """
-    
+
     html += f"""
         <p><strong>Total Budget:</strong> {plan.budget.currency} 
            {plan.budget.total_budget:.2f}</p>
@@ -1089,17 +1066,17 @@ def _generate_html_budget(plan: TravelPlan) -> str:
         <p><strong>Remaining:</strong> {plan.budget.currency} 
            {plan.budget.remaining:.2f}</p>
 """
-    
+
     # Add budget breakdown
     html += _generate_html_budget_breakdown(plan)
-    
+
     # Add saving recommendations
     html += _generate_html_saving_recommendations(plan)
-    
+
     html += """
     </div>
 """
-    
+
     return html
 
 
@@ -1107,7 +1084,7 @@ def _generate_html_budget_breakdown(plan: TravelPlan) -> str:
     """Generate HTML for budget breakdown."""
     if not plan.budget or not plan.budget.breakdown or len(plan.budget.breakdown) == 0:
         return ""
-        
+
     html = """
         <h3>Budget Breakdown</h3>
         <table>
@@ -1116,7 +1093,7 @@ def _generate_html_budget_breakdown(plan: TravelPlan) -> str:
                 <th>Amount</th>
             </tr>
 """
-    
+
     for category, amount in plan.budget.breakdown.items():
         html += f"""
             <tr>
@@ -1124,11 +1101,11 @@ def _generate_html_budget_breakdown(plan: TravelPlan) -> str:
                 <td>{plan.budget.currency} {amount:.2f}</td>
             </tr>
 """
-    
+
     html += """
         </table>
 """
-    
+
     return html
 
 
@@ -1136,24 +1113,24 @@ def _generate_html_saving_recommendations(plan: TravelPlan) -> str:
     """Generate HTML for saving recommendations."""
     if not plan.budget or not plan.budget.saving_recommendations:
         return ""
-        
+
     if len(plan.budget.saving_recommendations) == 0:
         return ""
-        
+
     html = """
         <h3>Saving Recommendations</h3>
         <ul>
 """
-    
+
     for rec in plan.budget.saving_recommendations:
         html += f"""
             <li>{rec}</li>
 """
-    
+
     html += """
         </ul>
 """
-    
+
     return html
 
 
@@ -1161,16 +1138,16 @@ def _generate_html_recommendations(plan: TravelPlan) -> str:
     """Generate HTML recommendations section."""
     if not plan.recommendations or len(plan.recommendations) == 0:
         return ""
-        
+
     html = """
     <h2>Recommendations</h2>
 """
-    
+
     for rec in plan.recommendations:
         html += f"""
     <div class="recommendation">{rec}</div>
 """
-    
+
     return html
 
 
@@ -1178,16 +1155,16 @@ def _generate_html_alerts(plan: TravelPlan) -> str:
     """Generate HTML alerts section."""
     if not plan.alerts or len(plan.alerts) == 0:
         return ""
-        
+
     html = """
     <h2>Important Alerts</h2>
 """
-    
+
     for alert in plan.alerts:
         html += f"""
     <div class="alert">{alert}</div>
 """
-    
+
     return html
 
 
@@ -1195,7 +1172,7 @@ def _generate_html_footer() -> str:
     """Generate HTML footer section."""
     return f"""
     <footer>
-        <p><small>Generated by AI Travel Planning System on {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</small></p>
+        <p><small>Generated by AI Travel Planning System on {datetime.now().strftime("%Y-%m-%d %H:%M:%S")}</small></p>
     </footer>
 </body>
 </html>
@@ -1377,15 +1354,15 @@ async def main() -> int:
     try:
         # Parse arguments and initialize logging
         args = _parse_arguments_and_setup_basic_logging()
-        
+
         # Initialize configuration
         system_config = await _initialize_system_configuration(args)
         if not system_config:
             return 1
-        
+
         # Run in query or interactive mode
         return await _run_selected_mode(args)
-        
+
     except TravelPlannerConfig.ConfigurationError as e:
         return _handle_configuration_error(e)
     except KeyboardInterrupt:
@@ -1404,11 +1381,13 @@ def _parse_arguments_and_setup_basic_logging() -> argparse.Namespace:
     # Setup basic logging first to capture any initialization errors
     setup_logging(log_level=args.log_level or "INFO", log_file=args.log_file)
     logger.info("Starting AI Travel Planning System")
-    
+
     return args
 
 
-async def _initialize_system_configuration(args: argparse.Namespace) -> TravelPlannerConfig | None:
+async def _initialize_system_configuration(
+    args: argparse.Namespace,
+) -> TravelPlannerConfig | None:
     """Initialize system configuration and rate limiting."""
     # Initialize configuration with validation
     system_config = initialize_config(
@@ -1432,16 +1411,18 @@ async def _initialize_system_configuration(args: argparse.Namespace) -> TravelPl
     # Initialize database if requested
     if args.init_db and not await _initialize_database_if_requested(system_config):
         return None
-        
+
     return system_config
 
 
 def _initialize_rate_limiting(args: argparse.Namespace) -> None:
     """Initialize rate limiting for external APIs."""
     if args.disable_rate_limits:
-        logger.warning("API rate limiting is disabled. This may cause API quota issues.")
+        logger.warning(
+            "API rate limiting is disabled. This may cause API quota issues."
+        )
         return
-        
+
     logger.info("Initializing API rate limiting...")
 
     # Check for custom rate limit configuration
@@ -1456,7 +1437,9 @@ def _load_custom_rate_limits(config_path: str) -> None:
     """Load custom rate limits from configuration file."""
     try:
         with open(config_path) as f:
-            from travel_planner.utils.rate_limiting import update_rate_limits_from_config
+            from travel_planner.utils.rate_limiting import (
+                update_rate_limits_from_config,
+            )
 
             rate_limit_config = json.load(f)
             update_rate_limits_from_config(rate_limit_config)
@@ -1501,15 +1484,17 @@ async def _initialize_database_if_requested(system_config: TravelPlannerConfig) 
 async def _run_selected_mode(args: argparse.Namespace) -> int:
     """Run the travel planner in the selected mode (query or interactive)."""
     # Determine if we should run in query mode (any query-related argument provided)
-    query_mode = any([
-        args.query,
-        args.origin,
-        args.destination,
-        args.departure_date,
-        args.return_date,
-        args.budget,
-        args.preferences_file,
-    ])
+    query_mode = any(
+        [
+            args.query,
+            args.origin,
+            args.destination,
+            args.departure_date,
+            args.return_date,
+            args.budget,
+            args.preferences_file,
+        ]
+    )
 
     if query_mode:
         return await _run_query_mode_with_display(args)

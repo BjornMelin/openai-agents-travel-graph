@@ -16,33 +16,40 @@ logger = get_logger(__name__)
 def query_analysis(state: TravelPlanningState) -> TravelPlanningState:
     """
     Analyze the user query to understand requirements and preferences.
-    
+
     Args:
         state: Current travel planning state
-        
+
     Returns:
         Updated travel planning state
     """
     logger.info("Starting query analysis")
-    
+
     orchestrator = OrchestratorAgent()
     result = orchestrator.invoke(state)
-    
+
     # Update state with query analysis results
     state.query = result.get("query", state.query)
     state.preferences = result.get("preferences", state.preferences)
     state.update_stage(WorkflowStage.QUERY_ANALYZED)
-    
-    destination = state.query.destination if state.query and state.query.destination else 'Unknown'
+
+    has_destination = state.query and state.query.destination
+    destination = state.query.destination if has_destination else "Unknown"
     logger.info(f"Query analyzed. Destination: {destination}")
-    
+
     # Add the result to conversation history for context
-    state.conversation_history.append({
-        "role": "system",
-        "content": f"Query analyzed: {destination if destination != 'Unknown' else 'Destination research needed'}"
-    })
-    
+    state.conversation_history.append(
+        {
+            "role": "system",
+            "content": (
+                f"Query analyzed: {destination}"
+                if destination != "Unknown"
+                else "Query analyzed: Destination research needed"
+            ),
+        }
+    )
+
     # Add the task result
     state.add_task_result("query_analysis", result)
-    
+
     return state

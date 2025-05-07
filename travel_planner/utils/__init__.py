@@ -2,6 +2,7 @@
 Utility modules for the Travel Planner system.
 """
 
+from travel_planner.config import LogLevel
 from travel_planner.utils.error_handling import (
     AgentExecutionError,
     APIError,
@@ -33,6 +34,7 @@ __all__ = [
     "APIError",
     "AgentExecutionError",
     "AgentLogger",
+    "LogLevel",
     "ResourceNotFoundError",
     "TravelPlannerError",
     "ValidationError",

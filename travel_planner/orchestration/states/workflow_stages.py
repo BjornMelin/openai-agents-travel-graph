@@ -11,6 +11,7 @@ from enum import Enum
 
 class WorkflowStage(str, Enum):
     """Enum representing stages in the travel planning workflow."""
+
     START = "start"
     QUERY_ANALYZED = "query_analyzed"
     DESTINATION_RESEARCHED = "destination_researched"

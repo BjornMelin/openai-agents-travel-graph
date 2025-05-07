@@ -23,31 +23,29 @@ transportation_planning = create_node_function(
     complete_stage=WorkflowStage.TRANSPORTATION_PLANNED,
     result_field="transportation_options",
     plan_field="transportation",
-    message_template="Local transportation planned with {count} options"
+    message_template="Local transportation planned with {count} options",
 )
 
 
 def transportation_task(state: TravelPlanningState) -> dict[str, any]:
     """
     Execute transportation planning task in parallel branch.
-    
+
     Args:
         state: Current travel planning state
-        
+
     Returns:
         Dictionary with task results
     """
     from travel_planner.orchestration.parallel import ParallelResult, ParallelTask
-    
+
     try:
         agent = TransportationAgent()
         result = agent.invoke(state)
-        
+
         return {
             "result": ParallelResult(
-                task_type=ParallelTask.TRANSPORTATION,
-                result=result,
-                completed=True
+                task_type=ParallelTask.TRANSPORTATION, result=result, completed=True
             )
         }
     except Exception as e:
@@ -57,6 +55,6 @@ def transportation_task(state: TravelPlanningState) -> dict[str, any]:
                 task_type=ParallelTask.TRANSPORTATION,
                 result={},
                 error=str(e),
-                completed=False
+                completed=False,
             )
         }

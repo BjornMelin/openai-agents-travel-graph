@@ -8,18 +8,14 @@ common execution patterns and error handling to reduce code duplication.
 from collections.abc import Callable
 from typing import Any
 
-from travel_planner.agents.base import BaseAgent
-from travel_planner.data.models import TravelPlan, NodeFunctionParams, AgentTaskParams
+from travel_planner.data.models import AgentTaskParams, NodeFunctionParams, TravelPlan
 from travel_planner.orchestration.states.planning_state import TravelPlanningState
-from travel_planner.orchestration.states.workflow_stages import WorkflowStage
 from travel_planner.utils.logging import get_logger
 
 logger = get_logger(__name__)
 
 
-def execute_agent_task(
-    params: AgentTaskParams
-) -> TravelPlanningState:
+def execute_agent_task(params: AgentTaskParams) -> TravelPlanningState:
     """
     Generic function to execute an agent task and update state.
 
@@ -75,7 +71,7 @@ def execute_agent_task(
 
 
 def create_node_function(
-    params: NodeFunctionParams
+    params: NodeFunctionParams,
 ) -> Callable[[TravelPlanningState], TravelPlanningState]:
     """
     Factory function to create node execution functions with common implementation.
@@ -106,20 +102,22 @@ def create_node_function(
     def node_function(state: TravelPlanningState) -> TravelPlanningState:
         """The actual node execution function."""
         agent = params.agent_class()
-        
+
         agent_task_params = AgentTaskParams(
             state=state,
             agent=agent,
             task_name=params.task_name,
             complete_stage=params.complete_stage,
             result_formatter=result_formatter,
-            result_processor=result_processor
+            result_processor=result_processor,
         )
-        
+
         return execute_agent_task(agent_task_params)
 
     # Set function metadata
     node_function.__name__ = params.task_name
-    node_function.__doc__ = f"Execute {params.task_name} using {params.agent_class.__name__}."
+    node_function.__doc__ = (
+        f"Execute {params.task_name} using {params.agent_class.__name__}."
+    )
 
     return node_function

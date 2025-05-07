@@ -20,10 +20,10 @@ classifiers = [
     "Programming Language :: Python :: 3.12",
 ]
 dependencies = [
-    "openai-agents>=0.0.14",  # OpenAI Agents SDK (latest version as of May 2025)
+    "openai-agents>=0.0.14", # OpenAI Agents SDK (latest version as of May 2025)
     "langchain>=0.1.0",
     "langgraph>=0.4.0",
-    "stagehand-py>=0.3.6",  # Browser automation (latest version as of May 2025)
+    "stagehand-py>=0.3.6", # Browser automation (latest version as of May 2025)
     "supabase>=2.1.0",
     "playwright>=1.42.0",
     "pydantic>=2.6.0",
@@ -36,7 +36,7 @@ dependencies = [
     "pycountry>=23.12.11",
     "tavily-python>=0.2.8",
     "firecrawl>=0.1.0",
-    "agents-sdk-models>=0.0.11",  # Model adapters for OpenAI Agents SDK
+    "agents-sdk-models>=0.0.11", # Model adapters for OpenAI Agents SDK
 ]
 
 [project.optional-dependencies]

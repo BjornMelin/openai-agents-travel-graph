@@ -519,13 +519,14 @@ class APIClient:
     @dataclass
     class RequestConfig:
         """Configuration for a generic HTTP request."""
+
         url: str
         method: str = "GET"
         params: dict[str, Any] | None = None
         json_data: dict[str, Any] | None = None
         headers: dict[str, str] | None = None
         service_name: str | None = None
-        
+
     @rate_limited("UNKNOWN")  # Will be replaced with actual service name
     async def generic_request(
         self,
@@ -559,10 +560,10 @@ class APIClient:
             request_method = getattr(session, config.method.lower())
 
             async with request_method(
-                config.url, 
-                params=config.params, 
-                json=config.json_data, 
-                headers=request_headers
+                config.url,
+                params=config.params,
+                json=config.json_data,
+                headers=request_headers,
             ) as response:
                 status_code = response.status
                 response_text = await response.text()

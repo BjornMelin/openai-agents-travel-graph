@@ -30,10 +30,10 @@ def setup_test_logging():
 def mock_openai_client():
     """Mock OpenAI client for testing."""
     mock_client = MagicMock()
-    
+
     # Mock the chat completions create method
     mock_client.chat.completions.create = AsyncMock()
-    
+
     # Set up a basic response structure
     mock_response = MagicMock()
     mock_choice = MagicMock()
@@ -41,9 +41,9 @@ def mock_openai_client():
     mock_message.content = "Test response"
     mock_choice.message = mock_message
     mock_response.choices = [mock_choice]
-    
+
     mock_client.chat.completions.create.return_value = mock_response
-    
+
     return mock_client
 
 
