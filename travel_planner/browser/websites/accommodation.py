@@ -15,7 +15,9 @@ from stagehand import PromptTemplate
 
 from travel_planner.browser.automation import BrowserAutomation
 from travel_planner.browser.error_recovery import with_recovery
-from travel_planner.data.models import Accommodation, AccommodationType
+from travel_planner.data.models import (
+    Accommodation, AccommodationType, AccommodationSearchParams
+)
 from travel_planner.utils.logging import get_logger
 
 logger = get_logger(__name__)
@@ -68,18 +70,7 @@ class AccommodationSearchAutomation(BrowserAutomation):
     @with_recovery(retries=2, delay=1, backoff=2)
     async def search_accommodations(
         self,
-        destination: str,
-        check_in_date: date,
-        check_out_date: date,
-        adults: int = 2,
-        children: int = 0,
-        rooms: int = 1,
-        accommodation_type: AccommodationType | None = None,
-        amenities: list[str] | None = None,
-        max_price: float | None = None,
-        min_rating: float | None = None,
-        max_results: int = 5,
-        sort_by: str = "popularity"
+        params: AccommodationSearchParams
     ) -> list[Accommodation]:
         """
         Search for accommodations with the specified parameters.
@@ -114,33 +105,27 @@ class AccommodationSearchAutomation(BrowserAutomation):
             await self._handle_initial_popups()
             
             # Fill out the search form
-            await self._fill_search_form(
-                destination, 
-                check_in_date, 
-                check_out_date,
-                adults,
-                children,
-                rooms
-            )
+            await self._fill_search_form(params)
             
             # Submit the search and wait for results
             await self._submit_search()
             
             # Apply additional filters if provided
-            if accommodation_type or amenities or max_price or min_rating:
+            if (params.accommodation_type or params.amenities or 
+                params.max_price or params.min_rating):
                 await self._apply_filters(
-                    accommodation_type=accommodation_type,
-                    amenities=amenities,
-                    max_price=max_price,
-                    min_rating=min_rating
+                    accommodation_type=params.accommodation_type,
+                    amenities=params.amenities,
+                    max_price=params.max_price,
+                    min_rating=params.min_rating
                 )
                 
             # Sort results if needed
-            if sort_by != "popularity":
-                await self._sort_results(sort_by)
+            if params.sort_by != "popularity":
+                await self._sort_results(params.sort_by)
                 
             # Extract accommodation results
-            accommodations = await self._extract_accommodation_results(max_results)
+            accommodations = await self._extract_accommodation_results(params.max_results)
             
             return accommodations
         except Exception as e:
@@ -194,12 +179,7 @@ class AccommodationSearchAutomation(BrowserAutomation):
     
     async def _fill_search_form(
         self,
-        destination: str,
-        check_in_date: date,
-        check_out_date: date,
-        adults: int = 2,
-        children: int = 0,
-        rooms: int = 1
+        params: AccommodationSearchParams
     ):
         """
         Fill out the accommodation search form.
@@ -230,15 +210,15 @@ class AccommodationSearchAutomation(BrowserAutomation):
         """)
         
         context = {
-            "destination": destination,
-            "check_in_date": check_in_date.strftime("%Y-%m-%d"),
-            "check_out_date": check_out_date.strftime("%Y-%m-%d"),
-            "adults": adults,
-            "children": children,
-            "rooms": rooms
+            "destination": params.destination,
+            "check_in_date": params.check_in_date.strftime("%Y-%m-%d"),
+            "check_out_date": params.check_out_date.strftime("%Y-%m-%d"),
+            "adults": params.adults,
+            "children": params.children,
+            "rooms": params.rooms
         }
         
-        logger.info(f"Filling accommodation search form for {destination}")
+        logger.info(f"Filling accommodation search form for {params.destination}")
         await self.execute_ai_action(prompt, context)
             
     async def _submit_search(self):

@@ -9,7 +9,7 @@ from collections.abc import Callable
 from typing import Any
 
 from travel_planner.agents.base import BaseAgent
-from travel_planner.data.models import TravelPlan
+from travel_planner.data.models import TravelPlan, NodeFunctionParams, AgentTaskParams
 from travel_planner.orchestration.states.planning_state import TravelPlanningState
 from travel_planner.orchestration.states.workflow_stages import WorkflowStage
 from travel_planner.utils.logging import get_logger
@@ -18,12 +18,7 @@ logger = get_logger(__name__)
 
 
 def execute_agent_task(
-    state: TravelPlanningState,
-    agent: BaseAgent,
-    task_name: str,
-    complete_stage: WorkflowStage,
-    result_formatter: Callable[[dict[str, Any]], str],
-    result_processor: Callable[[TravelPlanningState, dict[str, Any]], None] | None = None,
+    params: AgentTaskParams
 ) -> TravelPlanningState:
     """
     Generic function to execute an agent task and update state.
@@ -39,53 +34,48 @@ def execute_agent_task(
     Returns:
         Updated travel planning state
     """
-    logger.info(f"Executing {task_name} with {agent.__class__.__name__}")
+    logger.info(f"Executing {params.task_name} with {params.agent.__class__.__name__}")
 
     try:
         # Execute the agent
-        result = agent.invoke(state)
+        result = params.agent.invoke(params.state)
 
         # Initialize plan if needed
-        if state.plan is None:
-            state.plan = TravelPlan()
+        if params.state.plan is None:
+            params.state.plan = TravelPlan()
 
         # Update workflow stage
-        state.update_stage(complete_stage)
+        params.state.update_stage(params.complete_stage)
 
         # Format message and add to conversation history
-        message = result_formatter(result)
-        state.conversation_history.append({"role": "system", "content": message})
+        message = params.result_formatter(result)
+        params.state.conversation_history.append({"role": "system", "content": message})
 
         # Process results if a processor is provided
-        if result_processor:
-            result_processor(state, result)
+        if params.result_processor:
+            params.result_processor(params.state, result)
 
         # Add task result
-        state.add_task_result(task_name, result)
+        params.state.add_task_result(params.task_name, result)
 
-        logger.info(f"Completed {task_name} successfully")
-        return state
+        logger.info(f"Completed {params.task_name} successfully")
+        return params.state
 
     except Exception as e:
-        logger.error(f"Error in {task_name}: {e!s}")
-        state.mark_error(f"Error during {task_name}: {e!s}")
+        logger.error(f"Error in {params.task_name}: {e!s}")
+        params.state.mark_error(f"Error during {params.task_name}: {e!s}")
 
         # Check if we should retry
-        if state.should_retry(task_name):
+        if params.state.should_retry(params.task_name):
             logger.info(
-                f"Will retry {task_name} (attempt {state.retry_count.get(task_name, 0)})"
+                f"Will retry {params.task_name} (attempt {params.state.retry_count.get(params.task_name, 0)})"
             )
 
-        return state
+        return params.state
 
 
 def create_node_function(
-    agent_class: type[BaseAgent],
-    task_name: str,
-    complete_stage: WorkflowStage,
-    result_field: str,
-    plan_field: str,
-    message_template: str,
+    params: NodeFunctionParams
 ) -> Callable[[TravelPlanningState], TravelPlanningState]:
     """
     Factory function to create node execution functions with common implementation.
@@ -104,29 +94,32 @@ def create_node_function(
 
     def result_formatter(result: dict[str, Any]) -> str:
         """Format the result for conversation history."""
-        data = result.get(result_field, [])
+        data = result.get(params.result_field, [])
         count = len(data) if isinstance(data, list) else 1 if data else 0
-        return message_template.format(count=count)
+        return params.message_template.format(count=count)
 
     def result_processor(state: TravelPlanningState, result: dict[str, Any]) -> None:
         """Process results and update the plan."""
-        if state.plan and result_field in result:
-            setattr(state.plan, plan_field, result[result_field])
+        if state.plan and params.result_field in result:
+            setattr(state.plan, params.plan_field, result[params.result_field])
 
     def node_function(state: TravelPlanningState) -> TravelPlanningState:
         """The actual node execution function."""
-        agent = agent_class()
-        return execute_agent_task(
+        agent = params.agent_class()
+        
+        agent_task_params = AgentTaskParams(
             state=state,
             agent=agent,
-            task_name=task_name,
-            complete_stage=complete_stage,
+            task_name=params.task_name,
+            complete_stage=params.complete_stage,
             result_formatter=result_formatter,
-            result_processor=result_processor,
+            result_processor=result_processor
         )
+        
+        return execute_agent_task(agent_task_params)
 
     # Set function metadata
-    node_function.__name__ = task_name
-    node_function.__doc__ = f"Execute {task_name} using {agent_class.__name__}."
+    node_function.__name__ = params.task_name
+    node_function.__doc__ = f"Execute {params.task_name} using {params.agent_class.__name__}."
 
     return node_function

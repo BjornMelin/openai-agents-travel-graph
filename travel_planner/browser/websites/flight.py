@@ -13,7 +13,7 @@ from typing import Any
 from stagehand import PromptTemplate
 
 from travel_planner.browser.automation import BrowserAutomation
-from travel_planner.data.models import Flight, TravelMode
+from travel_planner.data.models import Flight, TravelMode, FlightSearchParams
 from travel_planner.utils.error_handling import with_retry
 from travel_planner.utils.logging import get_logger
 
@@ -67,15 +67,7 @@ class FlightSearchAutomation(BrowserAutomation):
     @with_retry(retries=2, delay=1, backoff=2)
     async def search_flights(
         self,
-        origin: str,
-        destination: str,
-        departure_date: date,
-        return_date: date | None = None,
-        adults: int = 1,
-        children: int = 0,
-        travel_class: TravelMode = TravelMode.ECONOMY,
-        max_results: int = 5,
-        sort_by: str = "price"
+        params: FlightSearchParams
     ) -> list[Flight]:
         """
         Search for flights with the specified parameters.
@@ -104,21 +96,14 @@ class FlightSearchAutomation(BrowserAutomation):
             await asyncio.sleep(2)
             
             # Fill out the search form
-            await self._fill_search_form(
-                origin, 
-                destination, 
-                departure_date, 
-                return_date,
-                adults,
-                children,
-                travel_class
-            )
+            await self._fill_search_form(params)
             
             # Submit the search and wait for results
             await self._submit_search()
             
             # Extract flight results
-            flights = await self._extract_flight_results(max_results, sort_by)
+            flights = await self._extract_flight_results(
+                params.max_results, params.sort_by)
             
             return flights
         except Exception as e:
@@ -135,13 +120,7 @@ class FlightSearchAutomation(BrowserAutomation):
     
     async def _fill_search_form(
         self,
-        origin: str,
-        destination: str,
-        departure_date: date,
-        return_date: date | None = None,
-        adults: int = 1,
-        children: int = 0,
-        travel_class: TravelMode = TravelMode.ECONOMY
+        params: FlightSearchParams
     ):
         """
         Fill out the flight search form.
@@ -157,7 +136,7 @@ class FlightSearchAutomation(BrowserAutomation):
             children: Number of child passengers
             travel_class: Travel class
         """
-        trip_type = "round trip" if return_date else "one way"
+        trip_type = "round trip" if params.return_date else "one way"
         
         # Use AI-based form filling for flexibility across different sites
         prompt = PromptTemplate("""
@@ -180,22 +159,22 @@ class FlightSearchAutomation(BrowserAutomation):
         
         context = {
             "trip_type": trip_type,
-            "origin": origin,
-            "destination": destination,
-            "departure_date": departure_date.strftime("%Y-%m-%d"),
-            "return_date": return_date.strftime("%Y-%m-%d") if return_date else None,
-            "adults": adults,
-            "children": children,
-            "travel_class": travel_class.value.replace("_", " ").title()
+            "origin": params.origin,
+            "destination": params.destination,
+            "departure_date": params.departure_date.strftime("%Y-%m-%d"),
+            "return_date": params.return_date.strftime("%Y-%m-%d") if params.return_date else None,
+            "adults": params.adults,
+            "children": params.children,
+            "travel_class": params.travel_class.value.replace("_", " ").title()
         }
         
-        logger.info(f"Filling flight search form for {origin} to {destination}")
+        logger.info(f"Filling flight search form for {params.origin} to {params.destination}")
         await self.execute_ai_action(prompt, context)
         
         # Additional provider-specific handling
         if self.provider == "google_flights":
             # Google Flights might need special handling for dates
-            await self._handle_google_flights_specifics(departure_date, return_date)
+            await self._handle_google_flights_specifics(params.departure_date, params.return_date)
         elif self.provider == "skyscanner":
             # Skyscanner might need special handling
             await self._handle_skyscanner_specifics()
