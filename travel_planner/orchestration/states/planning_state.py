@@ -95,7 +95,8 @@ class TravelPlanningState(BaseModel):
             WorkflowStage.ACTIVITIES_PLANNED: 0.8,
             WorkflowStage.BUDGET_MANAGED: 0.9,
             WorkflowStage.COMPLETE: 1.0,
-            WorkflowStage.PARALLEL_SEARCH_COMPLETED: 0.6,  # Equivalent to completing several stages
+            # Equivalent to completing several stages at once
+            WorkflowStage.PARALLEL_SEARCH_COMPLETED: 0.6,
         }
         self.progress = stage_weights.get(new_stage, self.progress)
     
@@ -110,7 +111,8 @@ class TravelPlanningState(BaseModel):
         self.interruption_reason = reason
         previous_stage = self.current_stage
         self.update_stage(WorkflowStage.INTERRUPTED)
-        self.previous_stage = previous_stage  # Preserve the actual stage we were interrupted at
+        # Preserve the actual stage we were interrupted at
+        self.previous_stage = previous_stage
         self.checkpoint_id = f"checkpoint_{uuid.uuid4().hex}"
         
     def mark_error(self, error_message: str) -> None:
@@ -124,7 +126,8 @@ class TravelPlanningState(BaseModel):
         self.error_count += 1
         previous_stage = self.current_stage
         self.update_stage(WorkflowStage.ERROR)
-        self.previous_stage = previous_stage  # Preserve the stage where the error occurred
+        # Preserve the stage where the error occurred
+        self.previous_stage = previous_stage
         
     def add_human_feedback(self, feedback: dict[str, Any]) -> None:
         """
@@ -222,7 +225,10 @@ class TravelPlanningState(BaseModel):
         
         # Convert stage strings to enums
         current_stage_str = checkpoint_data.get("current_stage", "start")
-        checkpoint_data["current_stage"] = WorkflowStage(current_stage_str) if current_stage_str else WorkflowStage.START
+        checkpoint_data["current_stage"] = (
+            WorkflowStage(current_stage_str) 
+            if current_stage_str else WorkflowStage.START
+        )
         
         previous_stage_str = checkpoint_data.get("previous_stage")
         if previous_stage_str:
@@ -244,6 +250,7 @@ class TravelPlanningState(BaseModel):
                 self.stage_times[stage] = datetime.fromisoformat(time_str)
                 
         # Now update all the basic attributes
+        excluded_fields = ["start_time", "last_update_time", "stage_times"]
         for key, value in checkpoint_data.items():
-            if key not in ["start_time", "last_update_time", "stage_times"] and hasattr(self, key):
+            if key not in excluded_fields and hasattr(self, key):
                 setattr(self, key, value)

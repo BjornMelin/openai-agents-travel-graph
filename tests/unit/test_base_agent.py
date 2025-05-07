@@ -8,12 +8,11 @@ from tests.unit.mock_openai import setup_mock_openai
 # Set up mock OpenAI client
 setup_mock_openai()
 
+import pytest  # noqa: E402
 
-import pytest
-
-from travel_planner.agents.base import (
+from travel_planner.agents.base import (  # noqa: E402
     AgentConfig,
-    BaseAgent,
+    BaseAgent, 
     InvalidConfigurationException,
 )
 

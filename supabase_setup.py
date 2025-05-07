@@ -85,7 +85,10 @@ async def handle_status_command(args: argparse.Namespace) -> int:
         )
 
         # Check if tables exist
-        query = "SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"
+        query = (
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = 'public'"
+        )
         tables_result = await client.client.rpc(
             "execute_sql",
             {"query": query},

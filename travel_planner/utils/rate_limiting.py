@@ -516,26 +516,27 @@ class APIClient:
         # Execute with rate limiting
         return await with_rate_limit(self.service_name, do_request)
 
+    @dataclass
+    class RequestConfig:
+        """Configuration for a generic HTTP request."""
+        url: str
+        method: str = "GET"
+        params: dict[str, Any] | None = None
+        json_data: dict[str, Any] | None = None
+        headers: dict[str, str] | None = None
+        service_name: str | None = None
+        
     @rate_limited("UNKNOWN")  # Will be replaced with actual service name
     async def generic_request(
         self,
-        url: str,
-        method: str = "GET",
-        params: dict[str, Any] | None = None,
-        json_data: dict[str, Any] | None = None,
-        headers: dict[str, str] | None = None,
-        service_name: str | None = None,
+        config: RequestConfig,
     ) -> dict[str, Any]:
         """
         Make a generic HTTP request with rate limiting and retries.
 
         Args:
-            url: Full URL for the request
-            method: HTTP method (GET, POST, etc.)
-            params: Query parameters (optional)
-            json_data: JSON data for request body (optional)
-            headers: HTTP headers (optional)
-            service_name: Override for the service name (optional)
+            config: Configuration for the HTTP request including URL, method,
+                   parameters, JSON data, headers, and optional service name
 
         Returns:
             Parsed JSON response
@@ -544,21 +545,24 @@ class APIClient:
             APIError: If the request fails after retries
         """
         # Replace the decorator's service name with the actual service
-        actual_service = service_name or self.service_name
+        actual_service = config.service_name or self.service_name
         self.generic_request.__defaults__ = (actual_service,)  # type: ignore
 
         # Prepare headers
         request_headers = {}
-        if headers:
-            request_headers.update(headers)
+        if config.headers:
+            request_headers.update(config.headers)
         if self.api_key and "Authorization" not in request_headers:
             request_headers["Authorization"] = f"Bearer {self.api_key}"
 
         async with aiohttp.ClientSession() as session:
-            request_method = getattr(session, method.lower())
+            request_method = getattr(session, config.method.lower())
 
             async with request_method(
-                url, params=params, json=json_data, headers=request_headers
+                config.url, 
+                params=config.params, 
+                json=config.json_data, 
+                headers=request_headers
             ) as response:
                 status_code = response.status
                 response_text = await response.text()

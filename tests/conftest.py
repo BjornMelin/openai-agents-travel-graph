@@ -10,9 +10,10 @@ import pytest
 pytest.importorskip("pytest_asyncio")
 pytest.mark.asyncio = pytest.mark.asyncio
 
-from travel_planner.agents.base import AgentConfig
-from travel_planner.config import APIConfig, SystemConfig, TravelPlannerConfig
-from travel_planner.utils import LogLevel, setup_logging
+# Import project modules after configuring pytest
+from travel_planner.agents.base import AgentConfig  # noqa: E402
+from travel_planner.config import APIConfig, SystemConfig, TravelPlannerConfig  # noqa: E402
+from travel_planner.utils import LogLevel, setup_logging  # noqa: E402
 
 
 @pytest.fixture(scope="session", autouse=True)
