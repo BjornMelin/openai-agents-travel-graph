@@ -161,55 +161,112 @@ class TavilyResearch(APIClient):
             "cultural_info": []
         }
         
-        # Process general information
-        if "general_info" in raw_results:
-            for result in raw_results["general_info"].get("results", []):
-                # Extract attractions from content
-                if "content" in result:
-                    content = result["content"]
-                    # Look for attractions in content
-                    if "attractions" in content.lower() or "things to do" in content.lower():
-                        # Extract attractions through simple parsing
-                        for line in content.split('\n'):
-                            if any(marker in line.lower() for marker in ["attraction", "visit", "sight", "landmark"]):
-                                processed["attractions"].append(line.strip())
-                    
-                    # Extract cultural information
-                    if any(marker in content.lower() for marker in ["culture", "tradition", "custom", "etiquette"]):
-                        processed["cultural_info"].append(content)
-                        
-                    # Extract transportation information
-                    if any(marker in content.lower() for marker in ["transport", "getting around", "metro", "bus", "taxi"]):
-                        processed["local_transportation"].append(content)
-        
-        # Process weather information
-        if "weather" in raw_results:
-            for result in raw_results["weather"].get("results", []):
-                if "content" in result:
-                    content = result["content"]
-                    
-                    # Extract best times to visit
-                    if "best time" in content.lower():
-                        for line in content.split('\n'):
-                            if "best time" in line.lower():
-                                processed["best_times_to_visit"].append(line.strip())
-                                
-                    # Extract weather information
-                    if any(season in content.lower() for season in ["summer", "winter", "spring", "fall", "autumn"]):
-                        processed["weather"]["seasonal"] = content
-        
-        # Process travel advisories
-        if "travel_advisories" in raw_results:
-            advisory_texts = []
-            for result in raw_results["travel_advisories"].get("results", []):
-                if "content" in result:
-                    advisory_texts.append(result["content"])
-            
-            if advisory_texts:
-                # Combine advisory texts
-                processed["safety_info"] = "\n".join(advisory_texts)
+        # Process different types of information
+        self._process_general_info(raw_results.get("general_info", {}), processed)
+        self._process_weather_info(raw_results.get("weather", {}), processed)
+        self._process_travel_advisories(raw_results.get("travel_advisories", {}), processed)
         
         return processed
+        
+    def _process_general_info(
+        self, 
+        general_info: dict[str, Any], 
+        processed: dict[str, Any]
+    ) -> None:
+        """Process general destination information."""
+        for result in general_info.get("results", []):
+            if "content" not in result:
+                continue
+                
+            content = result["content"]
+            self._extract_attractions(content, processed)
+            self._extract_cultural_info(content, processed)
+            self._extract_transportation_info(content, processed)
+    
+    def _extract_attractions(
+        self, 
+        content: str, 
+        processed: dict[str, Any]
+    ) -> None:
+        """Extract attractions from content."""
+        if not ("attractions" in content.lower() or "things to do" in content.lower()):
+            return
+            
+        attraction_markers = ["attraction", "visit", "sight", "landmark"]
+        for line in content.split('\n'):
+            if any(marker in line.lower() for marker in attraction_markers):
+                processed["attractions"].append(line.strip())
+    
+    def _extract_cultural_info(
+        self, 
+        content: str, 
+        processed: dict[str, Any]
+    ) -> None:
+        """Extract cultural information from content."""
+        cultural_markers = ["culture", "tradition", "custom", "etiquette"]
+        if any(marker in content.lower() for marker in cultural_markers):
+            processed["cultural_info"].append(content)
+    
+    def _extract_transportation_info(
+        self, 
+        content: str, 
+        processed: dict[str, Any]
+    ) -> None:
+        """Extract transportation information from content."""
+        transport_markers = ["transport", "getting around", "metro", "bus", "taxi"]
+        if any(marker in content.lower() for marker in transport_markers):
+            processed["local_transportation"].append(content)
+    
+    def _process_weather_info(
+        self, 
+        weather_info: dict[str, Any], 
+        processed: dict[str, Any]
+    ) -> None:
+        """Process weather information."""
+        for result in weather_info.get("results", []):
+            if "content" not in result:
+                continue
+                
+            content = result["content"]
+            self._extract_best_times(content, processed)
+            self._extract_seasonal_weather(content, processed)
+    
+    def _extract_best_times(
+        self, 
+        content: str, 
+        processed: dict[str, Any]
+    ) -> None:
+        """Extract best times to visit."""
+        if "best time" not in content.lower():
+            return
+            
+        for line in content.split('\n'):
+            if "best time" in line.lower():
+                processed["best_times_to_visit"].append(line.strip())
+    
+    def _extract_seasonal_weather(
+        self, 
+        content: str, 
+        processed: dict[str, Any]
+    ) -> None:
+        """Extract seasonal weather information."""
+        seasons = ["summer", "winter", "spring", "fall", "autumn"]
+        if any(season in content.lower() for season in seasons):
+            processed["weather"]["seasonal"] = content
+    
+    def _process_travel_advisories(
+        self, 
+        advisory_info: dict[str, Any], 
+        processed: dict[str, Any]
+    ) -> None:
+        """Process travel advisory information."""
+        advisory_texts = []
+        for result in advisory_info.get("results", []):
+            if "content" in result:
+                advisory_texts.append(result["content"])
+        
+        if advisory_texts:
+            processed["safety_info"] = "\n".join(advisory_texts)
     
     @rate_limited("tavily")
     async def _call_tavily_mcp(self, request: dict[str, Any]) -> dict[str, Any]:

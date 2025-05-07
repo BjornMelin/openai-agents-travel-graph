@@ -130,7 +130,10 @@ async def parallel_search_tasks(state: TravelPlanningState) -> TravelPlanningSta
     return updated_state
 
 
-def merge_parallel_results(state: TravelPlanningState, results: dict[str, Any]) -> TravelPlanningState:
+def merge_parallel_results(
+    state: TravelPlanningState,
+    results: dict[str, Any]
+) -> TravelPlanningState:
     """
     Merge results from parallel execution into the state.
     
@@ -148,57 +151,126 @@ def merge_parallel_results(state: TravelPlanningState, results: dict[str, Any]) 
     updated_state = state.model_copy(deep=True)
     
     # Initialize the plan if not yet created
-    if updated_state.plan is None:
+    updated_state = _ensure_plan_initialized(updated_state)
+    
+    # Process results from each agent
+    updated_state = _process_flight_results(updated_state, results)
+    updated_state = _process_accommodation_results(updated_state, results)
+    updated_state = _process_transportation_results(updated_state, results)
+    updated_state = _process_activity_results(updated_state, results)
+    
+    # Handle errors
+    updated_state = _process_parallel_errors(updated_state, results)
+    
+    return updated_state
+
+
+def _ensure_plan_initialized(state: TravelPlanningState) -> TravelPlanningState:
+    """Ensure the travel plan is initialized in the state."""
+    if state.plan is None:
         from travel_planner.data.models import TravelPlan
-        updated_state.plan = TravelPlan()
+        state.plan = TravelPlan()
+    return state
+
+
+def _process_flight_results(
+    state: TravelPlanningState,
+    results: dict[str, Any]
+) -> TravelPlanningState:
+    """Process flight search results from parallel execution."""
+    if "FlightSearchAgent" not in results or not results["FlightSearchAgent"]["result"]:
+        return state
     
-    # Process flight search results
-    if "FlightSearchAgent" in results and results["FlightSearchAgent"]["result"]:
-        flight_data = results["FlightSearchAgent"]["result"]
-        if "flights" in flight_data:
-            updated_state.plan.flights = flight_data["flights"]
-        if "flight_options" in flight_data:
-            updated_state.plan.flights = flight_data["flight_options"]
+    flight_data = results["FlightSearchAgent"]["result"]
     
-    # Process accommodation results
-    if "AccommodationAgent" in results and results["AccommodationAgent"]["result"]:
-        accom_data = results["AccommodationAgent"]["result"]
-        if "accommodations" in accom_data:
-            updated_state.plan.accommodation = accom_data["accommodations"]
-        if "accommodation_options" in accom_data:
-            updated_state.plan.accommodation = accom_data["accommodation_options"]
+    if "flights" in flight_data:
+        state.plan.flights = flight_data["flights"]
+    elif "flight_options" in flight_data:
+        state.plan.flights = flight_data["flight_options"]
     
-    # Process transportation results
-    if "TransportationAgent" in results and results["TransportationAgent"]["result"]:
-        transport_data = results["TransportationAgent"]["result"]
-        if "transportation" in transport_data:
-            updated_state.plan.transportation = transport_data["transportation"]
-        if "transportation_options" in transport_data:
-            updated_state.plan.transportation = transport_data["transportation_options"]
+    return state
+
+
+def _process_accommodation_results(
+    state: TravelPlanningState,
+    results: dict[str, Any]
+) -> TravelPlanningState:
+    """Process accommodation results from parallel execution."""
+    if ("AccommodationAgent" not in results or 
+            not results["AccommodationAgent"]["result"]):
+        return state
     
-    # Process activity results
-    if "ActivityPlanningAgent" in results and results["ActivityPlanningAgent"]["result"]:
-        activity_data = results["ActivityPlanningAgent"]["result"]
-        if "activities" in activity_data:
-            updated_state.plan.activities = activity_data["activities"]
-        if "daily_itineraries" in activity_data:
-            updated_state.plan.activities = activity_data["daily_itineraries"]
+    accom_data = results["AccommodationAgent"]["result"]
     
-    # Check for any errors and add them to the state
+    if "accommodations" in accom_data:
+        state.plan.accommodation = accom_data["accommodations"]
+    elif "accommodation_options" in accom_data:
+        state.plan.accommodation = accom_data["accommodation_options"]
+    
+    return state
+
+
+def _process_transportation_results(
+    state: TravelPlanningState,
+    results: dict[str, Any]
+) -> TravelPlanningState:
+    """Process transportation results from parallel execution."""
+    if ("TransportationAgent" not in results or 
+            not results["TransportationAgent"]["result"]):
+        return state
+    
+    transport_data = results["TransportationAgent"]["result"]
+    
+    if "transportation" in transport_data:
+        state.plan.transportation = transport_data["transportation"]
+    elif "transportation_options" in transport_data:
+        state.plan.transportation = transport_data["transportation_options"]
+    
+    return state
+
+
+def _process_activity_results(
+    state: TravelPlanningState,
+    results: dict[str, Any]
+) -> TravelPlanningState:
+    """Process activity planning results from parallel execution."""
+    if ("ActivityPlanningAgent" not in results or 
+            not results["ActivityPlanningAgent"]["result"]):
+        return state
+    
+    activity_data = results["ActivityPlanningAgent"]["result"]
+    
+    if "activities" in activity_data:
+        state.plan.activities = activity_data["activities"]
+    elif "daily_itineraries" in activity_data:
+        state.plan.activities = activity_data["daily_itineraries"]
+    
+    return state
+
+
+def _process_parallel_errors(
+    state: TravelPlanningState,
+    results: dict[str, Any]
+) -> TravelPlanningState:
+    """Process errors from parallel execution and add them to the state."""
     errors = []
+    
     for agent_name, result in results.items():
         if result.get("error"):
             errors.append(f"{agent_name}: {result['error']}")
     
     if errors:
-        if not updated_state.plan.alerts:
-            updated_state.plan.alerts = []
-        updated_state.plan.alerts.extend(errors)
+        if not state.plan.alerts:
+            state.plan.alerts = []
+        state.plan.alerts.extend(errors)
     
-    return updated_state
+    return state
 
 
-def combine_parallel_branch_results(state: TravelPlanningState, branch_results: dict[str, ParallelResult]) -> TravelPlanningState:
+def combine_parallel_branch_results(
+    state: TravelPlanningState,
+    branch_results: dict[str, ParallelResult]
+) -> TravelPlanningState:
     """
     Combine results from a LangGraph parallel branch execution.
     
@@ -213,67 +285,148 @@ def combine_parallel_branch_results(state: TravelPlanningState, branch_results: 
     updated_state = state.model_copy(deep=True)
     
     # Initialize the plan if not yet created
-    if updated_state.plan is None:
-        from travel_planner.data.models import TravelPlan
-        updated_state.plan = TravelPlan()
+    updated_state = _ensure_plan_initialized(updated_state)
     
-    # Process results from each task in the branch
-    result = branch_results.get("result")
-    if not result:
+    # Ensure there are results to process
+    if not _validate_branch_results(branch_results):
         logger.warning("No results from parallel branch execution")
         return updated_state
     
-    # Organize results by task type
+    # Extract and organize results by task type
+    results_by_task = _organize_branch_results(branch_results)
+    
+    # Process results from each task type
+    updated_state = _process_branch_flight_results(updated_state, results_by_task)
+    updated_state = _process_branch_accommodation_results(
+        updated_state, results_by_task)
+    updated_state = _process_branch_transportation_results(
+        updated_state, results_by_task)
+    updated_state = _process_branch_activity_results(updated_state, results_by_task)
+    updated_state = _process_branch_budget_results(updated_state, results_by_task)
+    
+    # Process errors
+    updated_state = _process_branch_errors(updated_state, results_by_task)
+    
+    # Update workflow stage
+    updated_state = _update_workflow_stage(updated_state)
+    
+    return updated_state
+
+
+def _validate_branch_results(branch_results: dict[str, ParallelResult]) -> bool:
+    """Validate that the branch results contain actual result data."""
+    return bool(branch_results.get("result"))
+
+
+def _organize_branch_results(
+    branch_results: dict[str, ParallelResult]
+) -> dict[ParallelTask, ParallelResult]:
+    """Organize parallel branch results by task type."""
     results_by_task = {}
     for task_result in branch_results.values():
         if isinstance(task_result, ParallelResult):
             task_type = task_result.task_type
             results_by_task[task_type] = task_result
+    return results_by_task
+
+
+def _process_branch_flight_results(
+    state: TravelPlanningState, 
+    results_by_task: dict[ParallelTask, ParallelResult]
+) -> TravelPlanningState:
+    """Process flight search results from branch execution."""
+    if ParallelTask.FLIGHT_SEARCH not in results_by_task:
+        return state
     
-    # Update the state with results from each task
-    # Flight search results
-    if ParallelTask.FLIGHT_SEARCH in results_by_task:
-        flight_result = results_by_task[ParallelTask.FLIGHT_SEARCH]
-        if flight_result.completed and not flight_result.error:
-            updated_state.plan.flights = flight_result.result.get("flight_options", [])
+    flight_result = results_by_task[ParallelTask.FLIGHT_SEARCH]
+    if flight_result.completed and not flight_result.error:
+        state.plan.flights = flight_result.result.get("flight_options", [])
     
-    # Accommodation results
-    if ParallelTask.ACCOMMODATION in results_by_task:
-        accom_result = results_by_task[ParallelTask.ACCOMMODATION]
-        if accom_result.completed and not accom_result.error:
-            updated_state.plan.accommodation = accom_result.result.get("accommodations", [])
+    return state
+
+
+def _process_branch_accommodation_results(
+    state: TravelPlanningState, 
+    results_by_task: dict[ParallelTask, ParallelResult]
+) -> TravelPlanningState:
+    """Process accommodation results from branch execution."""
+    if ParallelTask.ACCOMMODATION not in results_by_task:
+        return state
     
-    # Transportation results
-    if ParallelTask.TRANSPORTATION in results_by_task:
-        transport_result = results_by_task[ParallelTask.TRANSPORTATION]
-        if transport_result.completed and not transport_result.error:
-            updated_state.plan.transportation = transport_result.result.get("transportation_options", {})
+    accom_result = results_by_task[ParallelTask.ACCOMMODATION]
+    if accom_result.completed and not accom_result.error:
+        state.plan.accommodation = accom_result.result.get("accommodations", [])
     
-    # Activities results
-    if ParallelTask.ACTIVITIES in results_by_task:
-        activity_result = results_by_task[ParallelTask.ACTIVITIES]
-        if activity_result.completed and not activity_result.error:
-            updated_state.plan.activities = activity_result.result.get("daily_itineraries", {})
+    return state
+
+
+def _process_branch_transportation_results(
+    state: TravelPlanningState, 
+    results_by_task: dict[ParallelTask, ParallelResult]
+) -> TravelPlanningState:
+    """Process transportation results from branch execution."""
+    if ParallelTask.TRANSPORTATION not in results_by_task:
+        return state
     
-    # Budget results
-    if ParallelTask.BUDGET in results_by_task:
-        budget_result = results_by_task[ParallelTask.BUDGET]
-        if budget_result.completed and not budget_result.error:
-            updated_state.plan.budget = budget_result.result.get("report", {})
+    transport_result = results_by_task[ParallelTask.TRANSPORTATION]
+    if transport_result.completed and not transport_result.error:
+        state.plan.transportation = transport_result.result.get(
+            "transportation_options", {})
     
-    # Collect any errors and add them to the state
+    return state
+
+
+def _process_branch_activity_results(
+    state: TravelPlanningState, 
+    results_by_task: dict[ParallelTask, ParallelResult]
+) -> TravelPlanningState:
+    """Process activity results from branch execution."""
+    if ParallelTask.ACTIVITIES not in results_by_task:
+        return state
+    
+    activity_result = results_by_task[ParallelTask.ACTIVITIES]
+    if activity_result.completed and not activity_result.error:
+        state.plan.activities = activity_result.result.get("daily_itineraries", {})
+    
+    return state
+
+
+def _process_branch_budget_results(
+    state: TravelPlanningState, 
+    results_by_task: dict[ParallelTask, ParallelResult]
+) -> TravelPlanningState:
+    """Process budget results from branch execution."""
+    if ParallelTask.BUDGET not in results_by_task:
+        return state
+    
+    budget_result = results_by_task[ParallelTask.BUDGET]
+    if budget_result.completed and not budget_result.error:
+        state.plan.budget = budget_result.result.get("report", {})
+    
+    return state
+
+
+def _process_branch_errors(
+    state: TravelPlanningState, 
+    results_by_task: dict[ParallelTask, ParallelResult]
+) -> TravelPlanningState:
+    """Process errors from branch execution and add them to the state."""
     errors = []
+    
     for task_type, task_result in results_by_task.items():
         if task_result.error:
             errors.append(f"{task_type.value}: {task_result.error}")
     
     if errors:
-        if not updated_state.plan.alerts:
-            updated_state.plan.alerts = []
-        updated_state.plan.alerts.extend(errors)
+        if not state.plan.alerts:
+            state.plan.alerts = []
+        state.plan.alerts.extend(errors)
     
-    # Update the current stage
+    return state
+
+
+def _update_workflow_stage(state: TravelPlanningState) -> TravelPlanningState:
+    """Update the workflow stage in the state."""
     from travel_planner.orchestration.states.workflow_stages import WorkflowStage
-    updated_state.current_stage = WorkflowStage.PARALLEL_SEARCH_COMPLETED
-    
-    return updated_state
+    state.current_stage = WorkflowStage.PARALLEL_SEARCH_COMPLETED
+    return state
