@@ -1,0 +1,19 @@
+[tools]
+python = "3.12"  # Default Python version to use
+
+[venv]
+auto_create = true  # Auto-create virtual environments if needed
+location = ".venv"  # Store venv in this directory
+
+[uv]
+resolver = "strict"  # Use strict resolver for more accurate dependencies
+exclude-newer = false  # Don't exclude newer versions of dependencies
+
+[python]
+# Specify Python version selection method
+method = "pyenv"  # Use pyenv if available, otherwise use system Python
+
+[cache]
+# Configure caching behavior
+dir = "~/.cache/uv"  # Cache directory
+ttl = "30d"  # Cache time-to-live

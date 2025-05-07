@@ -155,7 +155,7 @@ source venv/bin/activate  # On Windows, use: venv\\Scripts\\activate
 curl -sSf https://astral.sh/uv/install.sh | bash
 
 # Install dependencies
-uv pip install -r requirements.txt
+uv pip install -e ".[dev]"
 
 # Set up environment variables
 cp .env.example .env
@@ -217,6 +217,27 @@ If you'd like to contribute to the development of this project, please follow th
 6. Submit a pull request
 
 This project uses [uv](https://github.com/astral-sh/uv) as its Python package manager. For all Python-related commands, use `uv run` (e.g., `uv run pytest`, `uv run python script.py`).
+
+### Package Management
+
+This project now uses `pyproject.toml` for dependency management. The legacy `requirements.txt` files are kept only for backward compatibility.
+
+To set up your development environment with uv:
+
+```bash
+# Create a virtual environment and install all dependencies
+uv venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+uv pip install -e ".[dev]"
+
+# Run linting and type checking
+uv run ruff .
+uv run mypy .
+
+# Format code
+uv run black .
+uv run isort .
+```
 
 See the [CONTRIBUTING.md](CONTRIBUTING.md) file for more details.
 

@@ -9,13 +9,22 @@ on different aspects of the travel planning process.
 import asyncio
 from collections.abc import Callable
 from enum import Enum
-from typing import Any, TypeVar
+from typing import TYPE_CHECKING, Any, TypeVar
 
 from pydantic import BaseModel
 
 from travel_planner.agents.base import BaseAgent
-from travel_planner.orchestration.states.planning_state import TravelPlanningState
+from travel_planner.orchestration.states.workflow_stages import (
+    PARALLEL_SEARCH_COMPLETED,
+)
 from travel_planner.utils.logging import get_logger
+
+# Use TYPE_CHECKING to avoid circular imports
+if TYPE_CHECKING:
+    from travel_planner.orchestration.states.planning_state import TravelPlanningState
+else:
+    # Forward references for type hints
+    TravelPlanningState = Any
 
 # Type for state update functions
 T = TypeVar("T")
@@ -59,25 +68,62 @@ async def execute_in_parallel(
 
     async def execute_task(agent: BaseAgent, params: dict[str, Any]) -> dict[str, Any]:
         """Execute a single agent task with retry logic."""
+        from tenacity import (
+            retry,
+            retry_if_exception_type,
+            stop_after_attempt,
+            wait_exponential,
+        )
+
+        # Define which exceptions should trigger retries
+        retryable_exceptions = (
+            ConnectionError,
+            TimeoutError,
+            asyncio.TimeoutError,
+        )
+
+        # Define retry decorator
+        @retry(
+            stop=stop_after_attempt(3),  # Try up to 3 times
+            wait=wait_exponential(multiplier=1, min=2, max=10),  # Exponential backoff
+            retry=retry_if_exception_type(retryable_exceptions),
+            reraise=True,  # Re-raise the last exception if all retries fail
+        )
+        async def execute_with_retry():
+            try:
+                return await agent.process(**params, context=state)
+            except retryable_exceptions as e:
+                logger.warning(f"Retryable error in {agent.name}: {e!s}. Will retry.")
+                raise  # Re-raise to trigger retry
+            except Exception as e:
+                logger.error(f"Non-retryable error in {agent.name}: {e!s}")
+                raise  # Re-raise to be caught by the outer try-except
+
         try:
-            result = await agent.process(**params, context=state)
-            return {agent.name: {"result": result, "error": None}}
+            # Try to execute with retry logic
+            result = await execute_with_retry()
+            return {agent.name: {"result": result, "error": None, "retries": 0}}
         except Exception as e:
-            logger.error(f"Error in parallel task {agent.name}: {e!s}")
-            return {agent.name: {"result": None, "error": str(e)}}
+            # Catch and log all exceptions after retries are exhausted
+            logger.error(f"Error in parallel task {agent.name} after retries: {e!s}")
+            return {agent.name: {"result": None, "error": str(e), "retries": 3}}
 
     # Create a list of coroutines to execute
     coroutines = [execute_task(agent, params) for agent, params in tasks]
 
-    # Execute all coroutines in parallel
-    results = await asyncio.gather(*coroutines)
+    # Execute all coroutines in parallel with timeout protection
+    try:
+        results = await asyncio.gather(*coroutines)
 
-    # Combine results into a single dictionary
-    combined_results = {}
-    for result in results:
-        combined_results.update(result)
+        # Combine results into a single dictionary
+        combined_results = {}
+        for result in results:
+            combined_results.update(result)
 
-    return combined_results
+        return combined_results
+    except TimeoutError:
+        logger.error("Parallel execution timed out")
+        return {"error": "Execution timeout exceeded"}
 
 
 async def parallel_search_tasks(state: TravelPlanningState) -> TravelPlanningState:
@@ -102,35 +148,93 @@ async def parallel_search_tasks(state: TravelPlanningState) -> TravelPlanningSta
 
     logger.info("Setting up parallel search tasks")
 
-    # Create agent instances
-    flight_agent = FlightSearchAgent()
-    accommodation_agent = AccommodationAgent()
-    transportation_agent = TransportationAgent()
-    activity_agent = ActivityPlanningAgent()
+    # Create a deep copy of the state to avoid mutations during parallel processing
+    # This helps prevent race conditions and unexpected state changes
+    working_state = state.model_copy(deep=True)
 
-    # Set up task list with agents and their parameters
-    tasks = [
-        (flight_agent, {"query": state.query}),
-        (accommodation_agent, {"query": state.query}),
-        (transportation_agent, {"query": state.query}),
-        (activity_agent, {"query": state.query, "preferences": state.preferences}),
-    ]
+    try:
+        # Create agent instances with lazy loading for better resource utilization
+        agents = {
+            "flight": FlightSearchAgent(),
+            "accommodation": AccommodationAgent(),
+            "transportation": TransportationAgent(),
+            "activity": ActivityPlanningAgent(),
+        }
 
-    logger.info(f"Executing {len(tasks)} tasks in parallel")
+        # Set up task list with agents and their parameters
+        # Include specific timeouts for each agent type
+        tasks = [
+            (agents["flight"], {"query": working_state.query, "timeout": 60}),
+            (agents["accommodation"], {"query": working_state.query, "timeout": 60}),
+            (agents["transportation"], {"query": working_state.query, "timeout": 45}),
+            (
+                agents["activity"],
+                {
+                    "query": working_state.query,
+                    "preferences": working_state.preferences,
+                    "timeout": 60,
+                },
+            ),
+        ]
 
-    # Execute all tasks in parallel
-    results = await execute_in_parallel(tasks, state)
+        logger.info(f"Executing {len(tasks)} tasks in parallel")
 
-    # Merge results into the state
-    updated_state = merge_parallel_results(state, results)
+        # Execute all tasks in parallel with overall timeout
+        async with asyncio.timeout(180):  # 3 minute overall timeout
+            results = await execute_in_parallel(tasks, working_state)
 
-    # Update the current stage
-    from travel_planner.orchestration.states.workflow_stages import WorkflowStage
+        # Check for overall errors in parallel execution
+        if "error" in results and not any(k != "error" for k in results):
+            logger.error(f"All parallel tasks failed: {results['error']}")
+            working_state.error = f"Parallel execution error: {results['error']}"
+            if not working_state.plan or not working_state.plan.alerts:
+                if not working_state.plan:
+                    from travel_planner.data.models import TravelPlan
 
-    updated_state.current_stage = WorkflowStage.PARALLEL_SEARCH_COMPLETED
+                    working_state.plan = TravelPlan()
+                working_state.plan.alerts = []
+            working_state.plan.alerts.append(
+                f"Error in parallel search: {results['error']}"
+            )
+            working_state.current_stage = "error"
+            return working_state
 
-    logger.info("Parallel search tasks completed")
-    return updated_state
+        # Merge results into the state
+        updated_state = merge_parallel_results(working_state, results)
+
+        # Update the current stage
+        updated_state.current_stage = PARALLEL_SEARCH_COMPLETED
+
+        logger.info("Parallel search tasks completed successfully")
+        return updated_state
+
+    except TimeoutError:
+        logger.error("Parallel search tasks timed out after 3 minutes")
+        working_state.error = "Parallel search timed out"
+        if not working_state.plan or not working_state.plan.alerts:
+            if not working_state.plan:
+                from travel_planner.data.models import TravelPlan
+
+                working_state.plan = TravelPlan()
+            working_state.plan.alerts = []
+        working_state.plan.alerts.append(
+            "Search operations timed out. Some results may be incomplete."
+        )
+        working_state.current_stage = "error"
+        return working_state
+
+    except Exception as e:
+        logger.error(f"Unexpected error in parallel search: {e!s}")
+        working_state.error = f"Unexpected error: {e!s}"
+        if not working_state.plan or not working_state.plan.alerts:
+            if not working_state.plan:
+                from travel_planner.data.models import TravelPlan
+
+                working_state.plan = TravelPlan()
+            working_state.plan.alerts = []
+        working_state.plan.alerts.append(f"Unexpected error in search: {e!s}")
+        working_state.current_stage = "error"
+        return working_state
 
 
 def merge_parallel_results(
@@ -320,7 +424,21 @@ def combine_parallel_branch_results(
 
 def _validate_branch_results(branch_results: dict[str, ParallelResult]) -> bool:
     """Validate that the branch results contain actual result data."""
-    return bool(branch_results.get("result"))
+    # Improved validation that checks if there's any result in the branch results
+    if not branch_results:
+        return False
+
+    # Check for the 'result' key at the top level
+    if branch_results.get("result"):
+        return True
+
+    # Check if any of the values in branch_results are ParallelResult objects
+    # that have completed successfully
+    for key, value in branch_results.items():
+        if isinstance(value, ParallelResult) and value.completed and not value.error:
+            return True
+
+    return False
 
 
 def _organize_branch_results(
@@ -427,7 +545,5 @@ def _process_branch_errors(
 
 def _update_workflow_stage(state: TravelPlanningState) -> TravelPlanningState:
     """Update the workflow stage in the state."""
-    from travel_planner.orchestration.states.workflow_stages import WorkflowStage
-
-    state.current_stage = WorkflowStage.PARALLEL_SEARCH_COMPLETED
+    state.current_stage = PARALLEL_SEARCH_COMPLETED
     return state

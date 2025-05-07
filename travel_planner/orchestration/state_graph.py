@@ -5,7 +5,6 @@ This module provides backward compatibility with the original state_graph.py
 implementation, re-exporting the refactored components from their new locations.
 """
 
-# Re-export the state models
 # Re-export the dependency injection system
 from travel_planner.orchestration.core.agent_registry import (
     AgentRegistry,

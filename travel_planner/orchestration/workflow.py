@@ -7,7 +7,7 @@ integrating the LangGraph state graph with agent interactions and event handling
 
 import traceback
 from datetime import datetime
-from typing import Any
+from typing import Any, cast
 
 from langgraph.errors import GraphError, InterruptibleError, NodeError, ValidationError
 
@@ -123,16 +123,65 @@ class TravelWorkflow:
         Returns:
             Complete travel plan
         """
-        # This is just a wrapper that calls the synchronous version for now
-        # In production, this would be implemented with async/await
-        return self.process_query(query, preferences)
+        logger.info(f"Processing travel query asynchronously: {query}")
+
+        # Create initial state
+        initial_state = TravelPlanningState(
+            query=TravelQuery(raw_query=query),
+            preferences=preferences or UserPreferences(),
+            conversation_history=[{"role": "user", "content": query}],
+        )
+
+        # Execute the graph with the initial state
+        try:
+            # Execute the full state graph workflow asynchronously
+            final_state = await self._execute_graph_async(initial_state)
+            return final_state.plan
+        except ValidationError as e:
+            # Handle validation errors (e.g., invalid state format)
+            logger.error(f"Validation error in async workflow: {e!s}")
+            initial_state.error = f"Validation error: {e!s}"
+            initial_state.conversation_history.append(
+                {
+                    "role": "system",
+                    "content": (
+                        f"Error: The travel query couldn't be processed due to "
+                        f"validation issues. {e!s}"
+                    ),
+                }
+            )
+            # Create a minimal plan with error information
+            return self._create_error_plan(e, "validation_error")
+        except NodeError as e:
+            # Handle specific node execution errors
+            logger.error(f"Node error in async workflow: {e!s}")
+            node_name = getattr(e, "node_name", "unknown")
+            logger.error(f"Error occurred in node: {node_name}")
+            # Create a partial plan with what we have so far
+            initial_state.error = f"Error in {node_name} stage: {e!s}"
+            return self._create_error_plan(e, f"node_error_{node_name}")
+        except InterruptibleError as e:
+            # Handle interruptions (could be user-triggered or system-triggered)
+            logger.info(f"Async workflow interrupted: {e!s}")
+            # Return partial results or resume later
+            return self._handle_interruption(initial_state, e)
+        except GraphError as e:
+            # Handle graph structure or execution errors
+            logger.error(f"Graph error in async workflow: {e!s}")
+            initial_state.error = f"Workflow error: {e!s}"
+            return self._create_error_plan(e, "graph_error")
+        except Exception as e:
+            # Handle any other unexpected errors
+            logger.error(f"Unexpected error in async travel planning workflow: {e!s}")
+            logger.error(traceback.format_exc())
+            initial_state.error = f"Unexpected error: {e!s}"
+            return self._create_error_plan(e, "unexpected_error")
 
     def _execute_graph(self, initial_state: TravelPlanningState) -> TravelPlanningState:
         """
         Execute the state graph with the given initial state.
 
-        This method is a synchronous version used for testing. In a real
-        implementation, it would execute the graph workflow using LangGraph.
+        This method executes the graph workflow using LangGraph's StateGraph.
 
         Args:
             initial_state: Starting state for the workflow
@@ -140,13 +189,19 @@ class TravelWorkflow:
         Returns:
             Final state after workflow completion
         """
-        # For testing, this is just a placeholder that returns the same state
-        # or raises the exception that was mocked in the tests
-
-        # In a real implementation, this would use LangGraph to execute the workflow
         logger.info("Starting workflow graph execution")
-        logger.info("Workflow execution completed successfully")
-        return initial_state
+
+        try:
+            # Execute the graph with initial state
+            result = self.graph.invoke(initial_state)
+
+            # Return the final state from the result
+            logger.info("Workflow execution completed successfully")
+            return cast(TravelPlanningState, result)
+
+        except Exception as e:
+            logger.error(f"Error executing graph: {e!s}")
+            raise
 
     async def _execute_graph_async(
         self, initial_state: TravelPlanningState
@@ -154,7 +209,7 @@ class TravelWorkflow:
         """
         Execute the state graph with the given initial state asynchronously.
 
-        This method uses LangGraph's arun() method to execute the workflow graph
+        This method uses LangGraph's ainvoke() method to execute the workflow graph
         asynchronously, passing through all the defined nodes in the proper sequence
         based on the conditional edges and transitions defined in the state graph.
 
@@ -164,9 +219,19 @@ class TravelWorkflow:
         Returns:
             Final state after workflow completion
         """
-        # This would be implemented with the actual LangGraph code in production
-        # For now, just use the synchronous version
-        return self._execute_graph(initial_state)
+        logger.info("Starting async workflow graph execution")
+
+        try:
+            # Execute the graph asynchronously with initial state
+            result = await self.graph.ainvoke(initial_state)
+
+            # Return the final state from the result
+            logger.info("Async workflow execution completed successfully")
+            return cast(TravelPlanningState, result)
+
+        except Exception as e:
+            logger.error(f"Error executing async graph: {e!s}")
+            raise
 
     def _create_error_plan(self, error: Exception, error_type: str) -> TravelPlan:
         """
@@ -319,5 +384,51 @@ class TravelWorkflow:
         Returns:
             Final travel plan after workflow completion
         """
-        # For now, just call the synchronous version
-        return self.resume_workflow(checkpoint_id, updates)
+        from travel_planner.orchestration.serialization.checkpoint import (
+            load_state_checkpoint,
+        )
+
+        logger.info(
+            f"Resuming workflow asynchronously from checkpoint: {checkpoint_id}"
+        )
+
+        try:
+            # Load the state from the checkpoint
+            state = load_state_checkpoint(checkpoint_id)
+
+            # Apply any updates to the state
+            if updates:
+                for key, value in updates.items():
+                    if hasattr(state, key):
+                        setattr(state, key, value)
+
+            # Mark as no longer interrupted
+            state.interrupted = False
+            state.interruption_reason = None
+
+            # Add a note about resumption to conversation history
+            state.conversation_history.append(
+                {
+                    "role": "system",
+                    "content": f"Resuming workflow from stage: {state.current_stage}",
+                }
+            )
+
+            # Execute the graph with the resumed state asynchronously
+            resumed_state = await self._execute_graph_async(state)
+            logger.info("Successfully resumed and completed workflow asynchronously")
+            return resumed_state.plan
+
+        except Exception as e:
+            logger.error(f"Error resuming workflow asynchronously: {e!s}")
+            logger.error(traceback.format_exc())
+            error_plan = TravelPlan()
+            error_plan.metadata = {
+                "error": str(e),
+                "error_type": "resume_error",
+                "timestamp": datetime.now().isoformat(),
+                "status": "failed",
+                "checkpoint_id": checkpoint_id,
+            }
+            error_plan.alerts = [f"Error resuming workflow asynchronously: {e!s}"]
+            return error_plan
